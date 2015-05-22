@@ -1,1 +1,18 @@
-build project
+prerequisite:
+ install zookeeper.
+
+code files struct:
+- functions file
+ utility.cc zk_manager.cc
+
+- test file
+ main_test.cc vsr_functions.cc 
+
+- project build file
+ makefile
+
+How to build:
+ make
+
+How to run:
+ LD_LIBRARY_PATH=/usr/local/lib/ ./test
