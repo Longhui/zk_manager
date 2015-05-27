@@ -1,3 +1,6 @@
+Build zk_manager as a dynamic-load-libary libzk_manager.so
+Do unittest in main_test.cc, which should link libzk_manager.so dynamicly when run.
+
 prerequisite:
  install zookeeper.
 
@@ -11,8 +14,8 @@ code files struct:
 - project build file
  makefile
 
-How to build:
+How to build dynamic-load-libary:
  make
 
-How to run:
- LD_LIBRARY_PATH=/usr/local/lib/ ./test
+How to run unittest:
+ bash run_unittest

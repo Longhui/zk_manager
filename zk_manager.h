@@ -1,3 +1,5 @@
+#ifndef ZK_MANAGER_H
+#define ZK_MANAGER_H
 /*====================================
 * author:	hzraolh
 * date:		2015-05-04
@@ -5,34 +7,26 @@
 * version:	1.0
 * descripation: define class zk_manager
 *====================================*/
-#include <string>
-#include <set>
-#include "zookeeper/zookeeper.h"
-using std::string;
-using std::set;
+typedef void (*func1_cb_t)(char *binlog_name, unsigned long long *binlog_pos);
+typedef void (*func2_cb_t)(const char*);
+typedef void* (*zm_connect_t)(const char* host, const char* port, const char* cluster_id);
+typedef int (*zm_disconnect_t)(void *data);
+typedef int (*zm_register_t)(void *data, const char* uuid, int *is_master);
+typedef int (*zm_get_syncpoint_t)(void *data, char* filename, char* pos);
+typedef int (*zm_start_repl_t)(void *data, const char* master_uuid);
+typedef int (*zm_stop_repl_t)(void *data, const char* master_uuid);
+typedef int (*zm_change_repl_mode_t)(void *data, int sync);
 
-class zk_manager
-{
-  public:
-    string cluster_id;
-    string host;
-    string port;
-    string my_uuid;
-    zhandle_t *handler;
-    set<string> nodes;
-    set<string> slaves;
-    bool i_am_master;
-    string my_master_znode_id;
+typedef void (*set_func1_cb_t)(func1_cb_t);
+typedef void (*set_func2_cb_t)(func2_cb_t);
 
-  public:
-    zk_manager(const char*, const char*, const char*);  
- 
-    int connect();
-    void disconnect(); 
-    int register_server(const char* uuid, int *master, char* binlog_filename, char* binlog_pos);
-    int start_repl(const char *master_uuid);
-    int stop_repl(const char *master_uuid);
-    int change_repl_mode(int sync);
-    int rm_repl(const char*);
-};
+extern func1_cb_t my_get_syncpoint;
+// loss replication slave
+extern func2_cb_t my_lost_all_slaves;
 
+// become master from standby
+extern func2_cb_t my_become_master;
+
+// have a replication slave
+extern func2_cb_t my_have_a_slave;
+#endif
