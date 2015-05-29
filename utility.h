@@ -1,10 +1,13 @@
 #include <string>
+#include <map>
 #include <set>
 #include "zookeeper/zookeeper.h"
 
 #define ZK_MANAGER_MAGIC 32115891
 
 using std::string;
+using std::map;
+using std::pair;
 using std::set;
 
 class zk_manager
@@ -15,8 +18,8 @@ class zk_manager
     string port;
     string my_uuid;
     zhandle_t *handler;
-    set<string> nodes;
-    set<string> slaves;
+    map<string,string> nodes;
+    set<string> active_slaves;
     bool i_am_master;
     string my_master_znode_id;
 

@@ -23,24 +23,95 @@ using std::set;
 *  OUT: 
 ***********************************************************/
 
+void repl_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void *ctx)
+{
+  if (ZOO_CHILD_EVENT == type)
+  {
+    struct String_vector children;
+    char buffer[100];
+    int buffer_len= 100;
+    struct Stat stat;
+    struct zk_manager *instance= (struct zk_manager*)ctx;
+
+    string repl_znode_id= instance->cluster_id + "/replication/"+ instance->my_uuid;
+    int ret= zoo_wget_children(zh, repl_znode_id.c_str(), repl_watcher_fn, (void *)ctx, &children);
+    if (ZOK == ret)
+    {
+        set<string> my_set;
+        for(int i=0; i< children.count; i++)
+        {
+          // get all current nodes's uuid and save in my_set
+          my_set.insert(children.data[i]);
+        }
+        if (my_set.size() > instance->active_slaves.size())
+        {//new nodes appear
+          set<string>::iterator it;
+          for (it= my_set.begin(); it != my_set.end(); ++it)
+          {
+            if (instance->active_slaves.end() == instance->active_slaves.find(*it))
+            {//find new node
+              int is_alive= 0;
+              map<string,string>::iterator it2;
+              for(it2= instance->nodes.begin(); it2 !=instance->nodes.end(); it2++)
+              {// new node is available?
+                if (it2->second == *it)
+                  is_alive= 1;
+              }
+
+              if ( is_alive && (0 == instance->active_slaves.size()) )
+              {
+                if (NULL != my_have_a_slave)
+                my_have_a_slave(instance->my_uuid.c_str()); 
+              }
+              instance->active_slaves.insert(*it);
+            }
+          }
+        }
+        else if (my_set.size() < instance->active_slaves.size())
+        {// some node disappeared
+          set<string>::iterator it;
+          for (it= instance->active_slaves.begin(); it!=instance->active_slaves.end(); ++it)
+          {
+            if(my_set.find(*it) == my_set.end())
+            {//find lost node
+               int is_alive= 0;
+               map<string,string>::iterator it2;
+               for(it2= instance->nodes.begin(); it2 !=instance->nodes.end(); it2++)
+               {// lost node is available?
+                 if (it2->second == *it)
+                 is_alive= 1;
+               }
+
+               instance->active_slaves.erase(*it);
+               if (is_alive && (0 == instance->active_slaves.size()))
+               {
+                 if (NULL != my_lost_all_slaves)
+                   my_lost_all_slaves(instance->my_uuid.c_str());
+               }
+            }
+          }
+        }
+    }
+  }
+}
+
+
 void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
 {
   char buffer[100]= {0};
   int buffer_len= 100;
   struct Stat stat;
   bool is_my_repl_master= 0;
+  bool is_my_repl_slave= 0;
 
   my_print("server [%s] offline\n", uuid.c_str());
 
   struct zk_manager *instance= (struct zk_manager *)data;
   int i_am_master= instance->i_am_master;
-
-  string repl_slave_id=instance->cluster_id+ "/replication/" + uuid + "/" + instance->my_uuid;
-
-  int ret= zoo_exists(zh, repl_slave_id.c_str(), 0, &stat);
-
   string my_master_znode_id= instance->my_master_znode_id;  
 
+  string repl_slave_id=instance->cluster_id+ "/replication/" + uuid + "/" + instance->my_uuid;
+  int ret= zoo_exists(zh, repl_slave_id.c_str(), 0, &stat);
   if (ZOK == ret)
   {// the disappeared node is my master
     is_my_repl_master= 1;
@@ -50,6 +121,29 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
     my_print("nodes_discrease() check znode %s exists fail. errno:%d\n", repl_slave_id.c_str(),
               ret);
     return;
+  }
+
+  repl_slave_id=instance->cluster_id+ "/replication/" + instance->my_uuid + "/" + uuid;
+  ret= zoo_exists(zh, repl_slave_id.c_str(), 0, &stat);
+  if (ZOK == ret)
+  {// the disappeared node is my master
+    is_my_repl_slave= 1;
+  } 
+  else if ( ZNONODE != ret )
+  {
+    my_print("nodes_discrease() check znode %s exists fail. errno:%d\n", repl_slave_id.c_str(),
+              ret);
+    return;
+  }
+
+  if (is_my_repl_slave)
+  {
+    instance->active_slaves.erase(instance->active_slaves.find(uuid));
+    if (0 == instance->active_slaves.size())
+    {
+      if(my_lost_all_slaves)
+        my_lost_all_slaves(instance->my_uuid.c_str());
+    }
   }
 
   if (0 == i_am_master)
@@ -111,14 +205,18 @@ void nodes_increase(zhandle_t *zh, const string &uuid, void *data)
     is_my_repl_master= 1;
   }
 
-  if (i_am_master)
+  if (is_my_repl_slave)
   {
-    if (0 == is_my_repl_slave)
+    if (instance->active_slaves.size() == 0)
     {
-      return;
-    }
-    //do something else
-  }else {
+      if (my_have_a_slave)
+        my_have_a_slave(instance->my_uuid.c_str());
+      instance->active_slaves.insert(uuid);
+    } 
+  }
+
+  if ( !i_am_master)
+  {  
     if (0 == is_my_repl_master)
     {
       return; 
@@ -139,65 +237,6 @@ void nodes_increase(zhandle_t *zh, const string &uuid, void *data)
 }
 
 
-void repl_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void *ctx)
-{
-  if (ZOO_CHILD_EVENT == type)
-  {
-    struct String_vector children;
-    char buffer[100];
-    int buffer_len= 100;
-    struct Stat stat;
-    struct zk_manager *instance= (struct zk_manager*)ctx;
-
-    string repl_znode_id= instance->cluster_id + "/replication/"+ instance->my_uuid;
-    int ret= zoo_wget_children(zh, repl_znode_id.c_str(), repl_watcher_fn, (void *)ctx, &children);
-    if (ZOK == ret)
-    {
-        set<string> my_set;
-        for(int i=0; i< children.count; i++)
-        {
-          // get all current nodes's uuid and save in my_set
-          my_set.insert(children.data[i]);
-        }
-        if (my_set.size() > instance->slaves.size())
-        {//new nodes appear
-          if (0 == instance->slaves.size())
-          {
-            if (NULL != my_have_a_slave)
-              my_have_a_slave(instance->my_uuid.c_str()); 
-          }
- 
-          set<string>::iterator it;
-          for (it= my_set.begin(); it != my_set.end(); ++it)
-          {
-            if (instance->slaves.end() == instance->slaves.find(*it))
-            {//can't find in nodes set
-              instance->slaves.insert(*it);
-            }
-          }
-        }
-        else if (my_set.size() < instance->slaves.size())
-        {// some node disappeared
-          set<string>::iterator it;
-          for (it= instance->slaves.begin(); it!=instance->slaves.end(); ++it)
-          {
-            if(my_set.find(*it) == my_set.end())
-            {//can't find in nodes set
-              instance->slaves.erase(*it);
-            }
-          }
-          if (0 == instance->slaves.size())
-          {
-            if (NULL != my_lost_all_slaves)
-              my_lost_all_slaves(instance->my_uuid.c_str());
-          }
-        }
-    }
-  }
-}
-
-
-
 void master_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void *ctx)
 {
   if (ZOO_CHILD_EVENT == type)
@@ -211,7 +250,7 @@ void master_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void
     int ret= zoo_wget_children(zh, path, master_watcher_fn, (void *)ctx, &children);
     if ( ZOK == ret )
     {
-        set<string> my_set;
+        map<string,string> my_map;
         for(int i=0; i< children.count; i++)
         {
           // get all current nodes's uuid and save in my_set
@@ -221,30 +260,30 @@ void master_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void
           if ( ZOK == ret)
           {
              buffer[buffer_len]= 0;
-             my_set.insert(buffer);
+             my_map.insert(pair<string,string>(children.data[i], buffer));
           }
         }
-        if (my_set.size() > instance->nodes.size())
+        if (my_map.size() > instance->nodes.size())
         {//new nodes appear
-          set<string>::iterator it;
-          for (it= my_set.begin(); it != my_set.end(); ++it)
+          map<string,string>::iterator it;
+          for (it= my_map.begin(); it != my_map.end(); ++it)
           {
-            if (instance->nodes.end() == instance->nodes.find(*it))
+            if (instance->nodes.end() == instance->nodes.find(it->first))
             {//can't find in nodes set
-              nodes_increase(zh, *it, (void *)ctx); 
+              nodes_increase(zh, it->second, (void *)ctx); 
               instance->nodes.insert(*it);
               // do something else;
             }
           } 
         }
-        else if (my_set.size() < instance->nodes.size())
+        else if (my_map.size() < instance->nodes.size())
         {// some node disappeared
-          set<string>::iterator it;
+          map<string,string>::iterator it;
           for (it= instance->nodes.begin(); it!=instance->nodes.end(); ++it)
           {
-            if(my_set.find(*it) == my_set.end())
+            if(my_map.find(it->first) == my_map.end())
             {//can't find in nodes set
-              nodes_discrease(zh, *it, (void *)ctx); 
+              nodes_discrease(zh, it->second, (void *)ctx); 
               instance->nodes.erase(it);
               // do something else
             }
@@ -379,8 +418,8 @@ int zk_manager::get_syncpoint(char* binlog_filename, char* binlog_pos)
          list<syncPoint> my_list;
          for (int i=0; i<children.count; i++)
          {
-           // save all slaves' uuid
-           slaves.insert(children.data[i]);
+           // save all active_slaves' uuid
+           active_slaves.insert(children.data[i]);
            string repl_slave_id= repl_znode_id + "/" + children.data[i];
            buffer_len=100;
            ret= zoo_get(handler, repl_slave_id.c_str(), 0, buffer, &buffer_len, &stat);
@@ -455,16 +494,6 @@ int zk_manager::register_server(const char* uuid, int *is_master)
     } 
   }
 
-  buffer[buffer_len]= 0;
-  struct String_vector children;
-  ret= zoo_wget_children(handler, repl_znode_id.c_str(), repl_watcher_fn, (void *)this, &children);
-  if (ZOK != ret)
-  {
-    my_print("register_server() failed, watch znode %s children error, errno: %d\n",
-     repl_znode_id.c_str(), ret);
-    return(EXIT_FAILURE);
-  }
-      
   //register znode below /master
   string repl_master_id= cluster_id + "/master/";
   ret= zoo_create(handler, repl_master_id.c_str(), uuid, strlen(uuid),
@@ -489,13 +518,29 @@ int zk_manager::register_server(const char* uuid, int *is_master)
           string znode_id= repl_master_id + "/" + children.data[i];
           buffer_len=100;
           ret= zoo_get(handler, znode_id.c_str(), 0, buffer2, &buffer_len, &stat2);
-          // get all current nodes's uuid and save in my_set
+          // get all current nodes's znode and uuid, save in nodes list
           if ( ZOK == ret)
           {
             buffer2[buffer_len]=0;
-            nodes.insert(buffer2);
+            nodes.insert(pair<string, string>(children.data[i], buffer2));
           }
         }
+
+        // get all active slaves
+        ret= zoo_wget_children(handler, repl_znode_id.c_str(), repl_watcher_fn, (void *)this, &children);
+        if (ZOK == ret) 
+        {
+          for (int i=0; i< children.count; i++)
+          {
+            for(map<string,string>::iterator it= nodes.begin(); it!=nodes.end(); ++it)
+            {
+              if (it->second == children.data[i])
+                active_slaves.insert(children.data[i]);
+            }
+          }
+        }   
+
+        // 
         my_list.sort();
 
         buffer_len=100;
@@ -537,8 +582,8 @@ int zk_manager::start_repl(const char* master_uuid)
   string repl_slave_id= cluster_id + "/replication/" + master_uuid + "/" + my_uuid;
   char binlog_name[100]= {0};
   unsigned long long binlog_pos;
-  if (NULL != my_get_syncpoint)
-    my_get_syncpoint(binlog_name, &binlog_pos);
+  if (NULL != my_set_syncpoint)
+    my_set_syncpoint(binlog_name, &binlog_pos);
 
   char syncpoint[100]= {0};
   sprintf(syncpoint, "%s:%lld", binlog_name, binlog_pos);
@@ -546,7 +591,7 @@ int zk_manager::start_repl(const char* master_uuid)
   if (ZNONODE == ret)
   {
     ret= zoo_create(handler, repl_slave_id.c_str(), syncpoint, strlen(syncpoint),
-                  &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL, 0, 0);
+                  &ZOO_OPEN_ACL_UNSAFE, 0, 0, 0);
     if (ZOK != ret)
     {
       my_print("create znode: %s fail. errno:%d\n", repl_slave_id.c_str(), ret);
@@ -563,13 +608,13 @@ int zk_manager::stop_repl(const char* master_uuid)
   // record my sync-point in slave znode
   char binlog_name[100]={0};
   unsigned long long binlog_pos= 0;
-  if (NULL != my_get_syncpoint)
-    my_get_syncpoint(binlog_name, &binlog_pos);
+  if (NULL != my_set_syncpoint)
+    my_set_syncpoint(binlog_name, &binlog_pos);
 
   char syncpoint[100]={0};
   sprintf(syncpoint, "%s:%lld", binlog_name, binlog_pos);
   string repl_slave_id=cluster_id+ "/replication/" + master_uuid + "/" + my_uuid;
-  int ret= zoo_set(handler, repl_slave_id.c_str(), syncpoint, 100, 0);
+  int ret= zoo_set(handler, repl_slave_id.c_str(), syncpoint, 100, -1);
   if ( ZOK != ret)
   {
     my_print("record syncpoint: %s to znode: %s fail. errno: %d\n", syncpoint,

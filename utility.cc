@@ -36,11 +36,11 @@ void my_print(const char* info, ...)
 }
 
 // get read_master_binlog_filename/position
-func1_cb_t my_get_syncpoint=NULL;
+func1_cb_t my_set_syncpoint=NULL;
 
-extern "C" void set_cb_getsyncpoint(func1_cb_t func1)
+extern "C" void set_cb_setsyncpoint(func1_cb_t func1)
 {
-  my_get_syncpoint= func1;
+  my_set_syncpoint= func1;
 }
 
 // loss replication slave
@@ -109,7 +109,7 @@ extern "C" int zm_register(void *data, const char* uuid, int *is_master)
     return ret;
   } else
   {
-    my_print("my_zm_disconnect() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print("my_zm_register() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 }
@@ -125,7 +125,7 @@ extern "C" int zm_get_syncpoint(void *data, char* filename, char* pos)
     return ret;
   } else
   {
-    my_print("my_zm_disconnect() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print("my_zm_get_syncpoint() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 } 
@@ -141,7 +141,7 @@ extern "C" int zm_start_repl(void *data, const char* master_uuid)
     return ret;
   } else
   {
-    my_print("my_zm_disconnect() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print("my_zm_start_repl() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 }
@@ -156,7 +156,21 @@ extern "C" int zm_stop_repl(void *data, const char* master_uuid)
     int ret= manager->stop_repl(master_uuid);
   } else
   {
-    my_print("my_zm_disconnect() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print("my_zm_stop_repl() fail. zk_manager ptr:%x is unvailable\n", data);
+    return -1;
+  }
+}
+
+extern "C" int zm_rm_repl(void *data, const char* master_uuid)
+{
+  zk_manager_p* zm= (zk_manager_p *)data;
+  if (ZK_MANAGER_MAGIC == zm->magic)
+  {
+    zk_manager *manager= (zk_manager*)(zm->ptr);
+    int ret= manager->rm_repl(master_uuid);
+  } else
+  {
+    my_print("my_zm_rm_repl() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 }
@@ -172,7 +186,7 @@ extern "C" int zm_change_repl_mode(void *data, int sync)
     return ret;
   } else
   {
-    my_print("my_zm_disconnect() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print("my_zm_change_repl_mode() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 }

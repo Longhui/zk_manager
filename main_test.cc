@@ -48,13 +48,13 @@ int main()
   }
   dlerror(); 
   // set callback function for zk_manager
-  set_func1_cb_t set_getsyncpoint;
-  set_getsyncpoint= (set_func1_cb_t)dlsym(handle, "set_cb_getsyncpoint");
+  set_func1_cb_t set_setsyncpoint;
+  set_setsyncpoint= (set_func1_cb_t)dlsym(handle, "set_cb_setsyncpoint");
   if ((error = dlerror()) != NULL)  {
       fprintf(stderr, "%s\n", error);
       exit(EXIT_FAILURE);
     }  
-  set_getsyncpoint(get_io_syncpoint);
+  set_setsyncpoint(get_io_syncpoint);
 
   set_func2_cb_t set_lostallslaves;
   set_lostallslaves= (set_func2_cb_t)dlsym(handle, "set_cb_lostallslaves");
@@ -120,6 +120,12 @@ int main()
       fprintf(stderr, "%s\n", error);
       exit(EXIT_FAILURE);
     } 
+  zm_rm_repl_t zm_rm_repl;
+  zm_rm_repl= (zm_rm_repl_t)dlsym(handle, "zm_rm_repl"); 
+  if ((error = dlerror()) != NULL)  {
+      fprintf(stderr, "%s\n", error);
+      exit(EXIT_FAILURE);
+    } 
   zm_change_repl_mode_t zm_change_repl_mode;
   zm_change_repl_mode= (zm_change_repl_mode_t)dlsym(handle, "zm_change_repl_mode"); 
   if ((error = dlerror()) != NULL)  {
@@ -131,15 +137,28 @@ int main()
   fprintf(stderr,"\n----Test register_server----\n");
 
   void *zm_p_1= zm_connect("127.0.0.1","3181","test111111");
-  fprintf(stderr, ">>>server [a1] should be master<<<\n");
+  fprintf(stderr, "\n>>>server [a1] should be master<<<\n");
   zm_register(zm_p_1, "a1", &is_master);
   sleep(1);
 
   void *zm_p_2= zm_connect("127.0.0.1","3181","test111111");
-  fprintf(stderr, ">>>server [a2] should be standby<<<\n");
+  fprintf(stderr, "\n>>>server [a2] should be standby<<<\n");
   zm_register(zm_p_2, "a2", &is_master);
   sleep(1);
 
+  fprintf(stderr,"\n----Test start/stop/rm repl----\n");
+
+  fprintf(stderr, "\n>>>server a1 should fould have a slave<<<\n");
+  zm_start_repl(zm_p_2, "a1");
+  sleep(1);
+  
+  fprintf(stderr, "\n>>>server a2 should record its syncpoint<<<\n");
+  zm_stop_repl(zm_p_2, "a1");
+  zm_stop_repl(zm_p_2, "a1");
+
+  fprintf(stderr, "\n>>>server a1 should fould lost slave<<<\n");
+  zm_rm_repl(zm_p_2, "a1");
+  sleep(1);
   //clean
   zm_disconnect(zm_p_1);
   zm_disconnect(zm_p_2);
@@ -157,7 +176,7 @@ int main()
 
   zm_start_repl(zm_p_2, "a1");
   sleep(1);
-  fprintf(stderr, ">>>server a2 should become master<<<\n");
+  fprintf(stderr, "\n>>>server a2 should become master<<<\n");
   sleep(1);
   zm_disconnect(zm_p_1);
   sleep(1);
@@ -165,11 +184,12 @@ int main()
   fprintf(stderr,"\n----Test sync master_online----\n");
 
   zm_p_1= zm_connect("127.0.0.1","3181","test111111");
-  fprintf(stderr, ">>>server a1 should read syncpoint successfully, and become standby<<<\n");
+  fprintf(stderr, "\n>>>server a1 should read syncpoint successfully, and become standby<<<\n");
   zm_register(zm_p_1, "a1", &is_master);
   zm_get_syncpoint(zm_p_1, binlog_name, binlog_pos);
 
   //clean
+  zm_rm_repl(zm_p_2, "a1");
   zm_disconnect(zm_p_1);
   zm_disconnect(zm_p_2);
 
@@ -187,17 +207,18 @@ int main()
   zm_start_repl(zm_p_2, "a1");
   zm_change_repl_mode(zm_p_1, 0);
   sleep(1);
-  fprintf(stderr, ">>>server a2 shouldn't become master, and it should deregister from zk_manager<<<\n");
+  fprintf(stderr, "\n>>>server a2 shouldn't become master, and it should deregister from zk_manager<<<\n");
   zm_disconnect(zm_p_1);
   sleep(1);
 
-  fprintf(stderr, ">>>server a1 should be master, server a2 should register again<<<\n");
+  fprintf(stderr, "\n>>>server a1 should be master, server a2 should register again<<<\n");
   zm_p_1= zm_connect("127.0.0.1","3181","test111111");
   zm_register(zm_p_1, "a1", &is_master);
   sleep(1);
   zm_change_repl_mode(zm_p_1, 1);
 
   //clean
+  zm_rm_repl(zm_p_2, "a1");
   zm_disconnect(zm_p_1);
   zm_disconnect(zm_p_2);
 
@@ -214,13 +235,17 @@ int main()
 
   zm_start_repl(zm_p_2, "a1");
   sleep(1);
-  fprintf(stderr, ">>>server a1 should find it lost slave<<<\n");
+  fprintf(stderr, "\n>>>server a1 should find it lost slave<<<\n");
   zm_disconnect(zm_p_2);  
   sleep(1);
 
   //clean
+  zm_p_2= zm_connect("127.0.0.1","3181","test111111");
+  zm_register(zm_p_2, "a2", &is_master);
+  zm_rm_repl(zm_p_2, "a1");
+
   zm_disconnect(zm_p_1);
-  //test1.disconnect();
+  zm_disconnect(zm_p_2);
 
   dlclose(handle);
  }
