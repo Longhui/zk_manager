@@ -50,12 +50,20 @@ extern "C" void set_cb_lostallslaves(func2_cb_t func1)
   my_lost_all_slaves=func1;
 }
 
-// become master from standby
+// become master
 func2_cb_t my_become_master= NULL;
 extern "C" void set_cb_becomemaster(func2_cb_t func1)
 {
   my_become_master= func1;
 }
+
+// become standby
+func2_cb_t my_become_standby= NULL;
+extern "C" void set_cb_becomestandby(func2_cb_t func1)
+{
+  my_become_standby= func1;
+}
+
 
 // have a replication slave
 func2_cb_t my_have_a_slave= NULL;

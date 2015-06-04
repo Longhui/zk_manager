@@ -8,7 +8,7 @@
 * descripation: define class zk_manager
 *====================================*/
 typedef void (*func1_cb_t)(char *binlog_name, unsigned long long *binlog_pos);
-typedef void (*func2_cb_t)(const char*);
+typedef int (*func2_cb_t)(const char*);
 typedef void* (*zm_connect_t)(const char* host, const char* port, const char* cluster_id);
 typedef int (*zm_disconnect_t)(void *data);
 typedef int (*zm_register_t)(void *data, const char* uuid, int *is_master);
@@ -25,8 +25,11 @@ extern func1_cb_t my_set_syncpoint;
 // loss replication slave
 extern func2_cb_t my_lost_all_slaves;
 
-// become master from standby
+// become master
 extern func2_cb_t my_become_master;
+
+// become standby
+extern func2_cb_t my_become_standby;
 
 // have a replication slave
 extern func2_cb_t my_have_a_slave;

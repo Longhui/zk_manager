@@ -164,9 +164,21 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
     {
       //i always do sync-replication with disapareed node, so i can be master.
       if (NULL != my_become_master)
-        my_become_master(instance->my_uuid.c_str());
-      instance->i_am_master= 1;
-
+      {
+        if(!my_become_master(instance->my_uuid.c_str()))
+        {
+          instance->i_am_master= 1;
+          my_print("server [%s] become master successfully\n", instance->my_uuid.c_str());
+        } else{
+          instance->i_am_master= 0;
+          my_print("server [%s] become master fail!!\n", instance->my_uuid.c_str());
+          my_print("server [%s] deregister from zk_manager\n", instance->my_uuid.c_str());
+          ret= zoo_delete(zh, my_master_znode_id.c_str(), -1);
+          instance->my_master_znode_id= "delete_by_myself";
+        } 
+      } else{
+        instance->i_am_master= 1;
+      }
     } else {
       //maybe i have lost some data of master, so i shouldn't be master.
       my_print("server [%s] can't become master, because it do async-replication\n", instance->my_uuid.c_str());
@@ -377,6 +389,7 @@ int zk_manager::connect()
 void zk_manager::disconnect()
 {
   zookeeper_close(handler); 
+  my_print("disconnect with zookeeper\n");
 }
 
 
@@ -437,8 +450,8 @@ int zk_manager::get_syncpoint(char* binlog_filename, char* binlog_pos)
          int p= offset.find(':');
          if (-1 != p)
          {
-           strncpy(binlog_filename, offset.substr(0, p).c_str(), 100);
-           strncpy(binlog_pos, offset.substr(p+1).c_str(), 30);
+           strncpy(binlog_filename, offset.substr(0, p).c_str(), 20);
+           strncpy(binlog_pos, offset.substr(p+1).c_str(), 15);
          }
       }
       
@@ -453,6 +466,7 @@ int zk_manager::get_syncpoint(char* binlog_filename, char* binlog_pos)
     return(EXIT_FAILURE);
   }
 
+  return 0;
 }
 
 
@@ -552,11 +566,17 @@ int zk_manager::register_server(const char* uuid, int *is_master)
           if ( my_uuid == buffer )
           {
             *is_master= i_am_master= 1;
+            if (NULL != my_become_master)
+              my_become_master(my_uuid.c_str());
+
             my_print("server [%s] become master\n", my_uuid.c_str());
           }
           else 
           {
             *is_master= i_am_master= 0;
+            if (NULL != my_become_standby)
+              my_become_standby(my_uuid.c_str());
+
             my_print("server [%s] become standby, current master is server [%s]\n", my_uuid.c_str(), buffer);
           }
         }
@@ -659,5 +679,4 @@ int zk_manager::change_repl_mode(int sync)
   }
   return(0);
 }
-
 

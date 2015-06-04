@@ -13,21 +13,38 @@ void get_io_syncpoint(char *binlog_name, unsigned long long *binlog_pos)
 }
 
 // loss replication slave
-void lost_all_slaves(const char* uuid)
+int lost_all_slaves(const char* uuid)
 {
   fprintf(stderr, "%s lost all slaves\n", uuid);
+  return 0;
 }
 
-// become master from standby
-void become_master(const char* uuid)
+// become master success
+int become_master(const char* uuid)
 {
-  fprintf(stderr, "%s become master\n", uuid);
+  fprintf(stderr, "%s become master success\n", uuid);
+  return 0;
 }
+
+// become master fail
+int become_master_1(const char* uuid)
+{
+  fprintf(stderr, "%s become master fail\n", uuid);
+  return 1;
+}
+// become standby
+int become_standby(const char* uuid)
+{
+  fprintf(stderr, "%s become standby\n", uuid);
+  return 0;
+}
+
 
 // have a replication slave
-void have_a_slave(const char* uuid)
+int have_a_slave(const char* uuid)
 {
   fprintf(stderr, "%s have a slave\n", uuid);
+  return 0;
 }
 
 
@@ -40,7 +57,7 @@ int main()
   void *handle;
   char *error;
 
-  //handle = dlopen("/styx/home/hzraolh/work/zk_manager/libzk_manager.so", RTLD_LAZY);
+  //handle = dlopen("/usr/local/lib/libzk_manager.so", RTLD_LAZY);
   handle = dlopen("./libzk_manager.so", RTLD_LAZY);
   if (!handle) {
       fprintf(stderr, "%s\n", dlerror());
@@ -72,6 +89,16 @@ int main()
     }  
 
   set_becomemaster(become_master);
+
+  set_func2_cb_t set_becomestandby;
+  set_becomestandby= (set_func2_cb_t)dlsym(handle, "set_cb_becomestandby");
+  if ((error = dlerror()) != NULL)  {
+      fprintf(stderr, "%s\n", error);
+      exit(EXIT_FAILURE);
+    }  
+
+  set_becomestandby(become_standby);
+
 
   set_func2_cb_t set_haveaslave;
   set_haveaslave= (set_func2_cb_t)dlsym(handle, "set_cb_haveaslave");
@@ -191,6 +218,30 @@ int main()
   //clean
   zm_rm_repl(zm_p_2, "a1");
   zm_disconnect(zm_p_1);
+  zm_disconnect(zm_p_2);
+
+  fprintf(stderr,"\n----Test sync master_offline, standby become master fail----\n");
+  //setup
+  zm_p_1= zm_connect("127.0.0.1","3181","test111111");
+  zm_register(zm_p_1, "a1", &is_master);
+  sleep(1);
+
+  zm_p_2= zm_connect("127.0.0.1","3181","test111111");
+  zm_register(zm_p_2, "a2", &is_master);
+  sleep(1);
+
+
+  zm_start_repl(zm_p_2, "a1");
+  sleep(1);
+  set_becomemaster(become_master_1);
+  fprintf(stderr, "\n>>>server a2 become master fail, it should deregister from zk_manager<<<\n");
+  sleep(1);
+  zm_disconnect(zm_p_1);
+  sleep(1);
+
+  //clean
+  set_becomemaster(become_master);
+  zm_rm_repl(zm_p_2, "a1");
   zm_disconnect(zm_p_2);
 
   fprintf(stderr,"\n----Test async master_offline----\n");
