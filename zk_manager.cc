@@ -60,8 +60,8 @@ void repl_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void *
 
               if ( is_alive && (0 == instance->active_slaves.size()) )
               {
-                if (NULL != my_have_a_slave)
-                my_have_a_slave(instance->my_uuid.c_str()); 
+                if (NULL != my_repl_slave_alive)
+                my_repl_slave_alive(instance->my_uuid.c_str()); 
               }
               instance->active_slaves.insert(*it);
             }
@@ -85,8 +85,8 @@ void repl_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void *
                instance->active_slaves.erase(*it);
                if (is_alive && (0 == instance->active_slaves.size()))
                {
-                 if (NULL != my_lost_all_slaves)
-                   my_lost_all_slaves(instance->my_uuid.c_str());
+                 if (NULL != my_repl_slave_dead)
+                   my_repl_slave_dead(instance->my_uuid.c_str());
                }
             }
           }
@@ -141,8 +141,8 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
     instance->active_slaves.erase(instance->active_slaves.find(uuid));
     if (0 == instance->active_slaves.size())
     {
-      if(my_lost_all_slaves)
-        my_lost_all_slaves(instance->my_uuid.c_str());
+      if(my_repl_slave_dead)
+        my_repl_slave_dead(instance->my_uuid.c_str());
     }
   }
 
@@ -150,6 +150,11 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
   { 
     if (0 == is_my_repl_master) 
       return;
+
+    if (NULL != my_repl_master_dead)
+    {
+      my_repl_master_dead(instance->my_uuid.c_str());
+    }
 
     string repl_master_id= instance->cluster_id + "/replication/" + uuid;
     ret= zoo_get(zh, repl_master_id.c_str(), 0, buffer, &buffer_len, &stat);
@@ -221,28 +226,31 @@ void nodes_increase(zhandle_t *zh, const string &uuid, void *data)
   {
     if (instance->active_slaves.size() == 0)
     {
-      if (my_have_a_slave)
-        my_have_a_slave(instance->my_uuid.c_str());
+      if (my_repl_slave_alive)
+        my_repl_slave_alive(instance->my_uuid.c_str());
       instance->active_slaves.insert(uuid);
     } 
   }
 
-  if ( !i_am_master)
-  {  
-    if (0 == is_my_repl_master)
+  if (is_my_repl_master)
+  {
+    if (NULL != my_repl_master_alive)
     {
-      return; 
+      my_repl_master_alive(instance->my_uuid.c_str());
     }
 
-    if ("delete_by_myself" == my_master_znode_id)
-    {// create my znode blow master_znode again;
-      string repl_master_id= instance->cluster_id + "/master/";
-      int ret= zoo_create(zh, repl_master_id.c_str(), instance->my_uuid.c_str(), instance->my_uuid.length(),
-           &ZOO_OPEN_ACL_UNSAFE, ZOO_SEQUENCE | ZOO_EPHEMERAL, buffer, 100);
-      if ( ZOK == ret )
-      {
-        my_print("server [%s] register at zk_manager again. znode:%s\n", instance->my_uuid.c_str(), buffer);
-        my_master_znode_id= buffer;
+    if ( !i_am_master)
+    {  
+      if ("delete_by_myself" == my_master_znode_id)
+      {// create my znode blow master_znode again;
+        string repl_master_id= instance->cluster_id + "/master/";
+        int ret= zoo_create(zh, repl_master_id.c_str(), instance->my_uuid.c_str(), instance->my_uuid.length(),
+             &ZOO_OPEN_ACL_UNSAFE, ZOO_SEQUENCE | ZOO_EPHEMERAL, buffer, 100);
+        if ( ZOK == ret )
+        {
+          my_print("server [%s] register at zk_manager again. znode:%s\n", instance->my_uuid.c_str(), buffer);
+          my_master_znode_id= buffer;
+        }
       }
     }
   }
@@ -389,7 +397,9 @@ int zk_manager::connect()
 void zk_manager::disconnect()
 {
   zookeeper_close(handler); 
-  my_print("disconnect with zookeeper\n");
+  my_print("server [%s] disconnect with zookeeper\n", my_uuid.c_str());
+  if (NULL != my_become_standby)
+    my_become_standby(my_uuid.c_str());
 }
 
 

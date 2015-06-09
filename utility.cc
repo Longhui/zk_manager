@@ -44,10 +44,24 @@ extern "C" void set_cb_setsyncpoint(func1_cb_t func1)
 }
 
 // loss replication slave
-func2_cb_t my_lost_all_slaves= NULL;
-extern "C" void set_cb_lostallslaves(func2_cb_t func1)
+func2_cb_t my_repl_slave_dead= NULL;
+extern "C" void set_cb_replslavedead(func2_cb_t func1)
 {
-  my_lost_all_slaves=func1;
+  my_repl_slave_dead=func1;
+}
+
+//repl master dead
+func2_cb_t my_repl_master_dead= NULL;
+extern "C" void set_cb_replmasterdead(func2_cb_t func1)
+{
+  my_repl_master_dead= func1;
+}
+
+//repl master dead
+func2_cb_t my_repl_master_alive= NULL;
+extern "C" void set_cb_replmasteralive(func2_cb_t func1)
+{
+  my_repl_master_alive= func1;
 }
 
 // become master
@@ -66,10 +80,10 @@ extern "C" void set_cb_becomestandby(func2_cb_t func1)
 
 
 // have a replication slave
-func2_cb_t my_have_a_slave= NULL;
-extern "C" void set_cb_haveaslave(func2_cb_t func1)
+func2_cb_t my_repl_slave_alive= NULL;
+extern "C" void set_cb_replslavealive(func2_cb_t func1)
 {
-  my_have_a_slave= func1;
+  my_repl_slave_alive= func1;
 }
 
 extern "C" void* zm_connect(const char* host, const char* port, const char* cluster_id)

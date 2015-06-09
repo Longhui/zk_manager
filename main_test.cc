@@ -73,13 +73,13 @@ int main()
     }  
   set_setsyncpoint(get_io_syncpoint);
 
-  set_func2_cb_t set_lostallslaves;
-  set_lostallslaves= (set_func2_cb_t)dlsym(handle, "set_cb_lostallslaves");
+  set_func2_cb_t set_replslavedead;
+  set_replslavedead= (set_func2_cb_t)dlsym(handle, "set_cb_replslavedead");
   if ((error = dlerror()) != NULL)  {
       fprintf(stderr, "%s\n", error);
       exit(EXIT_FAILURE);
     }  
-  set_lostallslaves(lost_all_slaves);
+  set_replslavedead(lost_all_slaves);
 
   set_func2_cb_t set_becomemaster;
   set_becomemaster= (set_func2_cb_t)dlsym(handle, "set_cb_becomemaster");
@@ -100,13 +100,13 @@ int main()
   set_becomestandby(become_standby);
 
 
-  set_func2_cb_t set_haveaslave;
-  set_haveaslave= (set_func2_cb_t)dlsym(handle, "set_cb_haveaslave");
+  set_func2_cb_t set_replslavealive;
+  set_replslavealive= (set_func2_cb_t)dlsym(handle, "set_cb_replslavealive");
   if ((error = dlerror()) != NULL)  {
       fprintf(stderr, "%s\n", error);
       exit(EXIT_FAILURE);
     }  
-  set_haveaslave(have_a_slave);
+  set_replslavealive(have_a_slave);
 
 
 //load zk_manager functions

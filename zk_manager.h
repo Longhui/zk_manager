@@ -23,14 +23,17 @@ typedef void (*set_func2_cb_t)(func2_cb_t);
 
 extern func1_cb_t my_set_syncpoint;
 // loss replication slave
-extern func2_cb_t my_lost_all_slaves;
+extern func2_cb_t my_repl_slave_dead;
+extern func2_cb_t my_repl_slave_alive;
 
 // become master
 extern func2_cb_t my_become_master;
+
+extern func2_cb_t my_repl_master_dead;
+extern func2_cb_t my_repl_master_alive;
 
 // become standby
 extern func2_cb_t my_become_standby;
 
 // have a replication slave
-extern func2_cb_t my_have_a_slave;
 #endif
