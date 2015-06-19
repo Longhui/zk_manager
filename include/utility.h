@@ -17,6 +17,7 @@ class zk_manager
     string host;
     string port;
     string my_uuid;
+    set<string> mysql_endpoints;
     zhandle_t *handler;
     map<string,string> nodes;
     set<string> active_slaves;
@@ -28,10 +29,11 @@ class zk_manager
  
     int connect();
     void disconnect(); 
+    int find_master_repl_znode(const char* master_endpoint, char* master_uuid);
     int get_syncpoint(char* binlog_filename, char* binlog_pos);
-    int register_server(const char* uuid, int *master);
-    int start_repl(const char *master_uuid);
-    int stop_repl(const char *master_uuid);
+    int register_server(const char* uuid, int service, int *master);
+    int start_repl(const char*);
+    int stop_repl(const char*);
     int change_repl_mode(int sync);
     int rm_repl(const char*);
 };

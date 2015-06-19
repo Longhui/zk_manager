@@ -6,10 +6,10 @@ prerequisite:
 
 code files struct:
 - functions file
- utility.cc zk_manager.cc
+ src/*, include/*
 
 - test file
- main_test.cc vsr_functions.cc 
+ unittest.cc
 
 - project build file
  makefile
@@ -18,4 +18,7 @@ How to build dynamic-load-libary:
  make
 
 How to run unittest:
- bash run_unittest
+ make test
+
+How to clean
+ make clean

@@ -121,13 +121,13 @@ extern "C" int zm_disconnect(void *data)
 }
 
 
-extern "C" int zm_register(void *data, const char* uuid, int *is_master)
+extern "C" int zm_register(void *data, const char* uuid, int port, int *is_master)
 {
   zk_manager_p* zm= (zk_manager_p *)data;
   if (ZK_MANAGER_MAGIC == zm->magic)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
-    int ret= manager->register_server(uuid, is_master);
+    int ret= manager->register_server(uuid, port, is_master);
     return ret;
   } else
   {

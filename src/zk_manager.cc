@@ -11,6 +11,9 @@
 #include <string.h>
 #include "utility.h"
 #include "zk_manager.h"
+#include "cjson.h"
+#include "ifaddr.h"
+#include "crc32.h"
 #include "zookeeper/zookeeper_log.h"
 
 using std::list;
@@ -164,8 +167,13 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
        ret);
       return;
     }
+
     buffer[buffer_len]=0;
-    if ( 0 == strncmp("sync", buffer, 4) )
+    cjson object;
+    object.load(buffer);
+    string mode= *(object["mode"].begin());
+
+    if ( 0 == strncmp("sync", mode.c_str(), 4) )
     {
       //i always do sync-replication with disapareed node, so i can be master.
       if (NULL != my_become_master)
@@ -330,7 +338,9 @@ void fn_watcher_g(zhandle_t* zh, int type, int state, const char* path, void* wa
           my_print("Connected to zookeeper service successfully!\n");
       } else if (state == ZOO_EXPIRED_SESSION_STATE) { 
           my_print("Zookeeper session expired!\n");
-      }
+          if (NULL != my_become_standby)
+            my_become_standby("-");
+     }
   }
 }
 
@@ -421,8 +431,15 @@ int zk_manager::get_syncpoint(char* binlog_filename, char* binlog_pos)
   else if(ZOK == ret)
   {
     buffer[buffer_len]= 0;
+    cjson object;
+    if(object.load(buffer))
+    {
+      my_print("get_syncpoint fail, %s is not a JSON format\n", buffer);
+      return(EXIT_FAILURE);
+    }
 
-    if (0 == strncmp("sync", buffer, 4))
+    string mode= *(object["mode"].begin());
+    if (0 == strncmp("sync", mode.c_str(), 4))
     {
       struct String_vector children;
       ret= zoo_get_children(handler, repl_znode_id.c_str(), 0, &children);
@@ -495,7 +512,7 @@ int zk_manager::get_syncpoint(char* binlog_filename, char* binlog_pos)
 *    sync_pos : slave's sync-point
 *************************************************************/
 
-int zk_manager::register_server(const char* uuid, int *is_master)
+int zk_manager::register_server(const char* uuid, int service, int *is_master)
 {
   char buffer[100];
   char buffer2[100];
@@ -505,15 +522,38 @@ int zk_manager::register_server(const char* uuid, int *is_master)
 
   my_uuid= uuid;
 
+  //register znode below /replication
   string repl_znode_id=cluster_id + "/replication/" + uuid;
   int ret= zoo_exists(handler, repl_znode_id.c_str(), 0, &stat);
+
+  cjson object;
+  if (get_endpoints_cipher(service, mysql_endpoints))
+  {
+    my_print("get service endpoints fail!\n");
+    return(EXIT_FAILURE);
+  }
+
+  object["endpoint"]= mysql_endpoints;
+  object["mode"]= "sync";
+  string repl_info= object.dump();
+
   if (ZNONODE == ret)
   {
-    ret= zoo_create(handler, repl_znode_id.c_str(), "sync", 4,
-           &ZOO_OPEN_ACL_UNSAFE, 0, 0, 0);;
+    ret= zoo_create(handler, repl_znode_id.c_str(), repl_info.c_str(),
+       repl_info.length(), &ZOO_OPEN_ACL_UNSAFE, 0, 0, 0);;
     if(ZOK != ret)
     {
-      my_print("can't find znode:%s\n", repl_znode_id.c_str());
+      my_print("can't create znode:%s\n", repl_znode_id.c_str());
+      return(EXIT_FAILURE);
+    } 
+  } 
+  else if (ZOK == ret)
+  {
+    ret= zoo_set(handler, repl_znode_id.c_str(), repl_info.c_str(), 
+                  repl_info.length(), -1);
+    if(ZOK != ret)
+    {
+      my_print("can't set znode:%s\n", repl_znode_id.c_str());
       return(EXIT_FAILURE);
     } 
   }
@@ -605,10 +645,62 @@ int zk_manager::register_server(const char* uuid, int *is_master)
   return(0);
 }
 
+/*
+  master_endpoint's format likes IP:PORT
+*/
+int zk_manager::find_master_repl_znode(const char* master_endpoint, char* master_uuid)
+{
+  struct String_vector children;
+  char buffer[100];
+  int buffer_len= 100;
+  struct Stat stat;
+  cjson object;
 
-int zk_manager::start_repl(const char* master_uuid)
+  char endpoint_cp[20]= {0};
+  int cipher= crc32(0, master_endpoint, strlen(master_endpoint));
+  sprintf(endpoint_cp, "%x", cipher);
+ 
+  string repl_znode= cluster_id + "/replication";
+
+  int ret= zoo_get_children(handler, repl_znode.c_str(), 0, &children);
+  if ( ZOK == ret )
+  {
+    for(int i=0; i< children.count; i++)
+    {
+      //get all masters' replication information 
+      string znode_id=cluster_id + "/replication/" + children.data[i];
+      ret= zoo_get(handler, znode_id.c_str(), 0, buffer, &buffer_len, &stat);
+      if ( ZOK == ret)
+      {
+         buffer[buffer_len]= 0;
+         if (object.load(buffer))
+         {
+           my_print("znode %s content %s isn't JSON format\n", znode_id.c_str(), buffer);
+           return(EXIT_FAILURE);
+         }
+         if (object["endpoint"].find(endpoint_cp) != object["endpoint"].end())
+         {
+           strncpy(master_uuid, children.data[i], strlen(children.data[i]));
+           return 0;
+         }
+      }
+    }
+  }
+  my_print("Can't find replication znode: %s (%s)\n", master_endpoint, endpoint_cp);
+  return(EXIT_FAILURE);
+}
+
+
+int zk_manager::start_repl(const char* master_endpoint)
 {
   struct Stat stat;
+  char master_uuid[30] = {0};
+  if (find_master_repl_znode(master_endpoint, master_uuid))
+  {
+    my_print("find_master_repl_znode failed!, master endpoint:%s\n", master_endpoint);
+    return(EXIT_FAILURE);
+  }
+
   string repl_slave_id= cluster_id + "/replication/" + master_uuid + "/" + my_uuid;
   char binlog_name[100]= {0};
   unsigned long long binlog_pos;
@@ -627,19 +719,26 @@ int zk_manager::start_repl(const char* master_uuid)
       my_print("create znode: %s fail. errno:%d\n", repl_slave_id.c_str(), ret);
       return(EXIT_FAILURE);
     }
-    my_print("record %s->%s replication on zk-manager\n", master_uuid, my_uuid.c_str());
+    my_print("record %s->%s replication on zookeeper\n", master_uuid, my_uuid.c_str());
   }
   return(0);
 }
 
 
-int zk_manager::stop_repl(const char* master_uuid)
+int zk_manager::stop_repl(const char* master_endpoint)
 {
   // record my sync-point in slave znode
   char binlog_name[100]={0};
   unsigned long long binlog_pos= 0;
   if (NULL != my_set_syncpoint)
     my_set_syncpoint(binlog_name, &binlog_pos);
+
+  char master_uuid[30] = {0};
+  if (find_master_repl_znode(master_endpoint, master_uuid))
+  {
+    my_print("find_master_repl_znode failed!, master endpoint:%s\n", master_endpoint);
+    return(EXIT_FAILURE);
+  }
 
   char syncpoint[100]={0};
   sprintf(syncpoint, "%s:%lld", binlog_name, binlog_pos);
@@ -653,15 +752,21 @@ int zk_manager::stop_repl(const char* master_uuid)
   }
   else
   {
-    my_print("record %s[m]->%s[s] syncpoint: %s to zk-manager \n", master_uuid, my_uuid.c_str(),
+    my_print("record %s[m]->%s[s] syncpoint: %s on zookeeper \n", master_uuid, my_uuid.c_str(),
       syncpoint);
   }
   return(0);
 }
 
 
-int zk_manager::rm_repl(const char* master_uuid)
+int zk_manager::rm_repl(const char* master_endpoint)
 {
+  char master_uuid[30] = {0};
+  if (find_master_repl_znode(master_endpoint, master_uuid))
+  {
+    my_print("find_master_repl_znode failed!, endpoint:%s\n", master_endpoint);
+    return(EXIT_FAILURE);
+  }
   string repl_slave_id= cluster_id + "/replication/" + master_uuid + "/" + my_uuid;
   int ret= zoo_delete(handler, repl_slave_id.c_str(), -1);
   if (ZOK != ret)
@@ -669,7 +774,7 @@ int zk_manager::rm_repl(const char* master_uuid)
     my_print("delete znode: %s fail. errno:%d\n", repl_slave_id.c_str(), ret);
     return(EXIT_FAILURE);
   }
-  my_print("remove %s[m]->%s[s] replication from zk-manager\n", master_uuid, my_uuid.c_str());
+  my_print("remove %s[m]->%s[s] replication on zookeeper\n", master_uuid, my_uuid.c_str());
   return(0);
 }
 
@@ -677,7 +782,12 @@ int zk_manager::rm_repl(const char* master_uuid)
 int zk_manager::change_repl_mode(int sync)
 {
   string repl_master_id= cluster_id + "/replication/" + my_uuid;
-  int ret= zoo_set(handler, repl_master_id.c_str(), sync > 0 ? "sync" : "async", sync > 0 ? 4 : 5, -1);
+  cjson object;
+  object["endpoint"]= mysql_endpoints;
+  object["mode"]= sync > 0 ? "sync" : "async";
+  string repl_info= object.dump();
+
+  int ret= zoo_set(handler, repl_master_id.c_str(), repl_info.c_str(), repl_info.length(), -1);
   if (ZOK != ret)
   { 
     my_print("change znode: %s value to %s fail. errno: %d\n", repl_master_id.c_str(), sync > 0 ? "sync": "async", ret);
