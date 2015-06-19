@@ -1,4 +1,0 @@
-g++ test.cc -ldl -o unittest
-./unittest
-
-
