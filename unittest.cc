@@ -265,6 +265,8 @@ int main()
   fprintf(stderr, "\n>>>server a1 should be master, server a2 should register again<<<\n");
   zm_p_1= zm_connect("127.0.0.1","3181","unittest");
   zm_register(zm_p_1, "a1", 3306, &is_master);
+  fprintf(stderr, "\n>>>server a1 should get syncpoint fail, because it do async-repl<<<\n");
+  zm_get_syncpoint(zm_p_1, binlog_name, binlog_pos);
   sleep(1);
   zm_change_repl_mode(zm_p_1, 1);
 

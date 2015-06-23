@@ -505,6 +505,7 @@ int zk_manager::get_syncpoint(char* binlog_filename, char* binlog_pos)
 * params:
 *  IN: 
 *    uuid: mysqld's identifier
+*    service: mysqld service port
 *  OUT: 
 *    master: 1 it is master 
 *            0 it is not master 
@@ -519,26 +520,25 @@ int zk_manager::register_server(const char* uuid, int service, int *is_master)
   struct Stat stat;
   struct Stat stat2;
   int buffer_len= 100;
+  cjson object;
 
   my_uuid= uuid;
-
-  //register znode below /replication
-  string repl_znode_id=cluster_id + "/replication/" + uuid;
-  int ret= zoo_exists(handler, repl_znode_id.c_str(), 0, &stat);
-
-  cjson object;
   if (get_endpoints_cipher(service, mysql_endpoints))
   {
     my_print("get service endpoints fail!\n");
     return(EXIT_FAILURE);
   }
-
-  object["endpoint"]= mysql_endpoints;
-  object["mode"]= "sync";
-  string repl_info= object.dump();
+  //register znode below /replication
+  string repl_znode_id=cluster_id + "/replication/" + uuid;
+  int ret= zoo_get(handler, repl_znode_id.c_str(), 0, buffer, &buffer_len, &stat);
+  buffer[buffer_len]= 0;
 
   if (ZNONODE == ret)
   {
+    object["mode"]= "sync";
+    object["endpoint"]= mysql_endpoints;
+    string repl_info= object.dump();
+
     ret= zoo_create(handler, repl_znode_id.c_str(), repl_info.c_str(),
        repl_info.length(), &ZOO_OPEN_ACL_UNSAFE, 0, 0, 0);;
     if(ZOK != ret)
@@ -549,6 +549,13 @@ int zk_manager::register_server(const char* uuid, int service, int *is_master)
   } 
   else if (ZOK == ret)
   {
+    if(object.load(buffer))
+    {
+      object["mode"]= "sync";
+    }
+    object["endpoint"]= mysql_endpoints;
+    string repl_info= object.dump();
+ 
     ret= zoo_set(handler, repl_znode_id.c_str(), repl_info.c_str(), 
                   repl_info.length(), -1);
     if(ZOK != ret)
