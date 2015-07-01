@@ -25,15 +25,38 @@ bool syncPoint::operator<(const syncPoint &str) const
     return ret < 0 ? 1 : 0;
 }
 
-
-void my_print(const char* info, ...)
+static void my_print(const char* msg, const char *level)
 {
-  fprintf(stderr, "[VSR HA] ");
+  fprintf(stderr, "[VSR HA]-[%s] ", level);
+}
+
+void my_print_info(const char* msg, ...)
+{
+  my_print(msg, "Info");
   va_list params;
-  va_start(params, info);
-  vfprintf(stderr, info, params);
+  va_start(params, msg);
+  vfprintf(stderr, msg, params);
   va_end(params);
 }
+
+void my_print_warn(const char* msg, ...)
+{
+  my_print(msg, "Warn");
+  va_list params;
+  va_start(params, msg);
+  vfprintf(stderr, msg, params);
+  va_end(params);
+}
+
+void my_print_error(const char* msg, ...)
+{
+  my_print(msg, "Error");
+  va_list params;
+  va_start(params, msg);
+  vfprintf(stderr, msg, params);
+  va_end(params);
+}
+
 
 // get read_master_binlog_filename/position
 func1_cb_t my_set_syncpoint=NULL;
@@ -115,7 +138,7 @@ extern "C" int zm_disconnect(void *data)
     delete zm;
   } else
   {
-    my_print("my_zm_disconnect() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print_info("my_zm_disconnect() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 }
@@ -131,7 +154,7 @@ extern "C" int zm_register(void *data, const char* uuid, int port, int *is_maste
     return ret;
   } else
   {
-    my_print("my_zm_register() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print_info("my_zm_register() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 }
@@ -147,7 +170,7 @@ extern "C" int zm_get_syncpoint(void *data, char* filename, char* pos)
     return ret;
   } else
   {
-    my_print("my_zm_get_syncpoint() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print_info("my_zm_get_syncpoint() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 } 
@@ -163,7 +186,7 @@ extern "C" int zm_start_repl(void *data, const char* master_uuid)
     return ret;
   } else
   {
-    my_print("my_zm_start_repl() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print_info("my_zm_start_repl() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 }
@@ -178,7 +201,7 @@ extern "C" int zm_stop_repl(void *data, const char* master_uuid)
     int ret= manager->stop_repl(master_uuid);
   } else
   {
-    my_print("my_zm_stop_repl() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print_info("my_zm_stop_repl() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 }
@@ -192,7 +215,7 @@ extern "C" int zm_rm_repl(void *data, const char* master_uuid)
     int ret= manager->rm_repl(master_uuid);
   } else
   {
-    my_print("my_zm_rm_repl() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print_info("my_zm_rm_repl() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 }
@@ -208,7 +231,7 @@ extern "C" int zm_change_repl_mode(void *data, int sync)
     return ret;
   } else
   {
-    my_print("my_zm_change_repl_mode() fail. zk_manager ptr:%x is unvailable\n", data);
+    my_print_info("my_zm_change_repl_mode() fail. zk_manager ptr:%x is unvailable\n", data);
     return -1;
   }
 }

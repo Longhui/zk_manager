@@ -7,6 +7,7 @@
 * version:	1.0
 * descripation: define class zk_manager
 *====================================*/
+#define REPL_ASYNC 3
 typedef void (*func1_cb_t)(char *binlog_name, unsigned long long *binlog_pos);
 typedef int (*func2_cb_t)(const char*);
 typedef void* (*zm_connect_t)(const char* host, const char* port, const char* cluster_id);

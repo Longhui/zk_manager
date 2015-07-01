@@ -50,6 +50,6 @@ public:
   bool operator<(const syncPoint &str) const;
 };
 
-void my_print(const char* info, ...);
+void my_print_info(const char* info, ...);
 
 

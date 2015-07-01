@@ -27,7 +27,7 @@ test:unittest
 	./unittest
 
 unittest:unittest.cc
-	$(CC) -o unittest unittest.cc -ldl -I$(IDIR) -Wwrite-strings	
+	$(CC) -o unittest unittest.cc -ldl -I$(IDIR) 
 
 .PHONY: clean
 
