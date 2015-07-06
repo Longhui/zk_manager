@@ -4,6 +4,8 @@
 #include "utility.h"
 #include "zk_manager.h"
 
+pthread_mutex_t lock_cb= PTHREAD_MUTEX_INITIALIZER;
+                        
 bool syncPoint::operator<(const syncPoint &str) const
 {
     int p1= this->find(':');
@@ -57,56 +59,209 @@ void my_print_error(const char* msg, ...)
   va_end(params);
 }
 
+func_int_void_t set_cb_funcs_1= NULL;
+extern "C" void set_func_set_cb_1(func_int_void_t func1)
+{
+  set_cb_funcs_1= func1;
+}
 
+func_int_void_t set_cb_funcs_2= NULL;
+extern "C" void set_func_set_cb_2(func_int_void_t func1)
+{
+  set_cb_funcs_2= func1;
+} 
+
+int set_all_cb_funcs()
+{//must have hold lock_cb
+  if (set_cb_funcs_1)
+    return set_cb_funcs_1();
+  else if (set_cb_funcs_2)
+    return set_cb_funcs_2();
+  else
+    return 1;
+}
 // get read_master_binlog_filename/position
-func1_cb_t my_set_syncpoint=NULL;
-
-extern "C" void set_cb_setsyncpoint(func1_cb_t func1)
+func_void_pchar_punll my_set_syncpoint=NULL;
+extern "C" void set_cb_setsyncpoint(func_void_pchar_punll func1)
 {
   my_set_syncpoint= func1;
 }
 
+void set_syncpoint_cb(char* binlog, unsigned long long *pos)
+{
+  int ret= 0;
+  pthread_mutex_lock(&lock_cb);
+  if (!my_set_syncpoint)
+  {
+    ret= set_all_cb_funcs();
+  }
+  if (my_set_syncpoint)
+  {
+    pthread_mutex_unlock(&lock_cb);
+    my_set_syncpoint(binlog, pos);
+  } else {
+    pthread_mutex_unlock(&lock_cb);
+    my_print_warn("sey_syncpoint callback function isn't set\n");
+  }
+}
+
+
 // loss replication slave
-func2_cb_t my_repl_slave_dead= NULL;
-extern "C" void set_cb_replslavedead(func2_cb_t func1)
+func_int_pchar_t my_repl_slave_dead= NULL;
+extern "C" void set_cb_replslavedead(func_int_pchar_t func1)
 {
   my_repl_slave_dead=func1;
 }
 
+void repl_slave_dead_cb(const char* uuid)
+{
+  int ret= 0;
+  pthread_mutex_lock(&lock_cb);
+  if (!my_repl_slave_dead)
+  {
+    ret= set_all_cb_funcs();
+  }
+  if (my_repl_slave_dead)
+  { 
+    pthread_mutex_unlock(&lock_cb);
+    my_repl_slave_dead(uuid);
+  }else{
+    pthread_mutex_unlock(&lock_cb);
+    my_print_warn("repl_slave_dead callback function isn't set\n");
+  }
+}
+
+// have a replication slave
+func_int_pchar_t my_repl_slave_alive= NULL;
+extern "C" void set_cb_replslavealive(func_int_pchar_t func1)
+{
+  my_repl_slave_alive= func1;
+}
+
+void repl_slave_alive_cb(const char* uuid)
+{
+  int ret= 0;
+  pthread_mutex_lock(&lock_cb);
+  if (!my_repl_slave_alive)
+  {
+    ret= set_all_cb_funcs();
+  }
+  if (my_repl_slave_alive)
+  { 
+    pthread_mutex_unlock(&lock_cb);
+    my_repl_slave_alive(uuid);
+  } else {
+    pthread_mutex_unlock(&lock_cb);
+    my_print_warn("repl_slave_alive callback function isn't set\n");
+  }
+}
+
 //repl master dead
-func2_cb_t my_repl_master_dead= NULL;
-extern "C" void set_cb_replmasterdead(func2_cb_t func1)
+func_int_pchar_t my_repl_master_dead= NULL;
+extern "C" void set_cb_replmasterdead(func_int_pchar_t func1)
 {
   my_repl_master_dead= func1;
 }
 
+void repl_master_dead_cb(const char* uuid)
+{
+  int ret= 0;
+  pthread_mutex_lock(&lock_cb);
+  if (!my_repl_master_dead)
+  {
+    ret= set_all_cb_funcs();
+  }
+  if (repl_master_dead_cb)
+  { 
+    pthread_mutex_unlock(&lock_cb);
+    my_repl_master_dead(uuid);
+  }else {
+    pthread_mutex_unlock(&lock_cb);
+    my_print_warn("repl_master_dead callback function isn't set\n");
+  }
+}
+
 //repl master dead
-func2_cb_t my_repl_master_alive= NULL;
-extern "C" void set_cb_replmasteralive(func2_cb_t func1)
+func_int_pchar_t my_repl_master_alive= NULL;
+extern "C" void set_cb_replmasteralive(func_int_pchar_t func1)
 {
   my_repl_master_alive= func1;
 }
 
+void repl_master_alive_cb(const char* uuid)
+{
+  int ret= 0;
+  pthread_mutex_lock(&lock_cb);
+  if (!my_repl_master_alive)
+  {
+    ret= set_all_cb_funcs();
+  }
+  if (my_repl_master_alive)
+  {
+    pthread_mutex_unlock(&lock_cb);
+    my_repl_master_alive(uuid);
+  }
+  else
+  { 
+    pthread_mutex_unlock(&lock_cb);
+    my_print_warn("repl_master_alive callback function isn't set\n");
+  }
+}
+
 // become master
-func2_cb_t my_become_master= NULL;
-extern "C" void set_cb_becomemaster(func2_cb_t func1)
+func_int_pchar_t my_become_master= NULL;
+extern "C" void set_cb_becomemaster(func_int_pchar_t func1)
 {
   my_become_master= func1;
 }
 
+int become_master_cb(const char* uuid)
+{
+  int ret= 0;
+  pthread_mutex_lock(&lock_cb);
+  if (!my_become_master)
+  {
+    ret= set_all_cb_funcs();
+  }
+  pthread_mutex_unlock(&lock_cb);
+  if (my_become_master)
+  {
+    pthread_mutex_unlock(&lock_cb);
+    ret= my_become_master(uuid);
+  }
+  else
+  {
+    pthread_mutex_unlock(&lock_cb);
+    my_print_warn("become_master callback function isn't set\n");
+  }
+  return ret;
+}
+
 // become standby
-func2_cb_t my_become_standby= NULL;
-extern "C" void set_cb_becomestandby(func2_cb_t func1)
+func_int_pchar_t my_become_standby= NULL;
+extern "C" void set_cb_becomestandby(func_int_pchar_t func1)
 {
   my_become_standby= func1;
 }
 
-
-// have a replication slave
-func2_cb_t my_repl_slave_alive= NULL;
-extern "C" void set_cb_replslavealive(func2_cb_t func1)
+void become_standby_cb(const char* uuid)
 {
-  my_repl_slave_alive= func1;
+  int ret= 0;
+  pthread_mutex_lock(&lock_cb);
+  if (!my_become_standby)
+  {
+    ret= set_all_cb_funcs();
+  }
+  if (my_become_standby)
+  {
+    pthread_mutex_unlock(&lock_cb);
+    my_become_standby(uuid);
+  }
+  else
+  {
+    pthread_mutex_unlock(&lock_cb);
+    my_print_warn("become_standby callback function isn't set\n");
+  }
 }
 
 extern "C" void* zm_connect(const char* host, const char* port, const char* cluster_id)
@@ -144,13 +299,13 @@ extern "C" int zm_disconnect(void *data)
 }
 
 
-extern "C" int zm_register(void *data, const char* uuid, int port, int *is_master)
+extern "C" int zm_register(void *data, const char* uuid, int port, int delay)
 {
   zk_manager_p* zm= (zk_manager_p *)data;
   if (ZK_MANAGER_MAGIC == zm->magic)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
-    int ret= manager->register_server(uuid, port, is_master);
+    int ret= manager->register_server(uuid, port, delay);
     return ret;
   } else
   {
@@ -220,6 +375,15 @@ extern "C" int zm_rm_repl(void *data, const char* master_uuid)
   }
 }
 
+extern "C" void my_lock_cb()
+{
+  pthread_mutex_lock(&lock_cb);
+}
+
+extern "C" void my_unlock_cb()
+{
+  pthread_mutex_unlock(&lock_cb);
+}
 
 extern "C" int zm_change_repl_mode(void *data, int sync)
 {

@@ -63,8 +63,7 @@ void repl_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void *
 
               if ( is_alive && (0 == instance->active_slaves.size()) )
               {
-                if (NULL != my_repl_slave_alive)
-                my_repl_slave_alive(instance->my_uuid.c_str()); 
+                repl_slave_alive_cb(instance->my_uuid.c_str()); 
               }
               instance->active_slaves.insert(*it);
             }
@@ -88,8 +87,7 @@ void repl_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void *
                instance->active_slaves.erase(*it);
                if (is_alive && (0 == instance->active_slaves.size()))
                {
-                 if (NULL != my_repl_slave_dead)
-                   my_repl_slave_dead(instance->my_uuid.c_str());
+                 repl_slave_dead_cb(instance->my_uuid.c_str());
                }
             }
           }
@@ -119,12 +117,6 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
   {// the disappeared node is my master
     is_my_repl_master= 1;
   } 
-  else if ( ZNONODE != ret )
-  {
-    my_print_info("nodes_discrease() check znode %s exists fail. errno:%d\n", repl_slave_id.c_str(),
-              ret);
-    return;
-  }
 
   repl_slave_id=instance->cluster_id+ "/replication/" + instance->my_uuid + "/" + uuid;
   ret= zoo_exists(zh, repl_slave_id.c_str(), 0, &stat);
@@ -139,22 +131,22 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
     return;
   }
 
+  pthread_mutex_lock(&instance->lock);
+
   if (is_my_repl_slave)
   {
     instance->active_slaves.erase(instance->active_slaves.find(uuid));
     if (0 == instance->active_slaves.size())
     {
-      if(my_repl_slave_dead)
-        my_repl_slave_dead(instance->my_uuid.c_str());
+      repl_slave_dead_cb(instance->my_uuid.c_str());
     }
   }
 
-  if (0 == i_am_master)
+  //the master dead, check if can I become master or not.
+  if (!i_am_master && is_my_repl_master)
   { 
-    if (0 == is_my_repl_master) 
-      return;
 
-    if (NULL != my_repl_master_dead)
+    if (my_repl_master_dead)
     {
       my_repl_master_dead(instance->my_uuid.c_str());
     }
@@ -165,7 +157,7 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
     {
       my_print_info("nodes_discrease() get znode %s fail. errno:%d\n", repl_master_id.c_str(),
        ret);
-      return;
+      goto end;
     }
 
     buffer[buffer_len]=0;
@@ -176,9 +168,7 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
     if ( 0 == strncmp("sync", mode.c_str(), 4) )
     {
       //i always do sync-replication with disapareed node, so i can be master.
-      if (NULL != my_become_master)
-      {
-        if(!my_become_master(instance->my_uuid.c_str()))
+        if(!become_master_cb(instance->my_uuid.c_str()))
         {
           instance->i_am_master= 1;
           my_print_info("server [%s] become master successfully\n", instance->my_uuid.c_str());
@@ -189,9 +179,6 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
           ret= zoo_delete(zh, my_master_znode_id.c_str(), -1);
           instance->my_master_znode_id= "delete_by_myself";
         } 
-      } else{
-        instance->i_am_master= 1;
-      }
     } else {
       //maybe i have lost some data of master, so i shouldn't be master.
       my_print_info("server [%s] can't become master, because it do async-replication\n", instance->my_uuid.c_str());
@@ -200,6 +187,9 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
       instance->my_master_znode_id= "delete_by_myself";
     }
   }
+
+end:
+  pthread_mutex_unlock(&instance->lock);
 }
 
 
@@ -213,55 +203,64 @@ void nodes_increase(zhandle_t *zh, const string &uuid, void *data)
   my_print_info("server [%s] online\n", uuid.c_str());
 
   struct zk_manager *instance= (zk_manager *)data;
-  int i_am_master= instance->i_am_master;
   string my_master_znode_id= instance->my_master_znode_id;  
 
+  int i_am_master= instance->i_am_master;
   string repl_slave_id= instance->cluster_id+ "/replication/" + instance->my_uuid + "/" +uuid;
-
   int ret= zoo_exists(zh, repl_slave_id.c_str(), 0, &stat);
   if ( ZOK == ret )
-  {// the appeared node is my slave
+  {// the new node is my slave
     is_my_repl_slave= 1;
   }
   repl_slave_id=instance->cluster_id+ "/replication/" + uuid + "/" + instance->my_uuid;
   ret= zoo_exists(zh, repl_slave_id.c_str(), 0, &stat);
   if ( ZOK == ret )
-  {// the appeared node is my master
+  {// the new node is my master
     is_my_repl_master= 1;
+  }
+
+  pthread_mutex_lock(&instance->lock);
+  if ("delay_register" == my_master_znode_id)
+  {
+    string repl_master_id= instance->cluster_id + "/master/";
+    int ret= zoo_create(zh, repl_master_id.c_str(), instance->my_uuid.c_str(), instance->my_uuid.length(),
+           &ZOO_OPEN_ACL_UNSAFE, ZOO_SEQUENCE | ZOO_EPHEMERAL, buffer, 100);
+    if ( ZOK == ret )
+    {
+      instance->compeleted_register= 1;
+      instance->my_master_znode_id= buffer;
+      my_print_info("server [%s] become standby, znode is [%s]\n", 
+                     instance->my_uuid.c_str(), buffer);
+      instance->i_am_master= 0;
+    }
   }
 
   if (is_my_repl_slave)
   {
     if (instance->active_slaves.size() == 0)
     {
-      if (my_repl_slave_alive)
-        my_repl_slave_alive(instance->my_uuid.c_str());
       instance->active_slaves.insert(uuid);
+      repl_slave_alive_cb(instance->my_uuid.c_str());
     } 
   }
 
   if (is_my_repl_master)
   {
-    if (NULL != my_repl_master_alive)
-    {
-      my_repl_master_alive(instance->my_uuid.c_str());
-    }
+    repl_master_alive_cb(instance->my_uuid.c_str());
 
-    if ( !i_am_master)
-    {  
-      if ("delete_by_myself" == my_master_znode_id)
-      {// create my znode blow master_znode again;
-        string repl_master_id= instance->cluster_id + "/master/";
-        int ret= zoo_create(zh, repl_master_id.c_str(), instance->my_uuid.c_str(), instance->my_uuid.length(),
-             &ZOO_OPEN_ACL_UNSAFE, ZOO_SEQUENCE | ZOO_EPHEMERAL, buffer, 100);
-        if ( ZOK == ret )
-        {
-          my_print_info("server [%s] register at zk_manager again. znode:%s\n", instance->my_uuid.c_str(), buffer);
-          my_master_znode_id= buffer;
-        }
+    if ("delete_by_myself" == my_master_znode_id)
+    {// create my znode blow master_znode again;
+      string repl_master_id= instance->cluster_id + "/master/";
+      int ret= zoo_create(zh, repl_master_id.c_str(), instance->my_uuid.c_str(), instance->my_uuid.length(),
+            &ZOO_OPEN_ACL_UNSAFE, ZOO_SEQUENCE | ZOO_EPHEMERAL, buffer, 100);
+      if ( ZOK == ret )
+      {
+        my_print_info("server [%s] register at zk_manager again. znode:%s\n", instance->my_uuid.c_str(), buffer);
+        my_master_znode_id= buffer;
       }
     }
   }
+  pthread_mutex_unlock(&instance->lock);
 }
 
 
@@ -322,13 +321,20 @@ void master_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void
 }
 
 
-zk_manager::zk_manager(const char *shost, const char* sport, 
-  const char *name)
+zk_manager::zk_manager(const char *shost, const char* sport, const char *name)
+ : i_am_master(0),
+   compeleted_register(0)
 {
   host=shost;
   port= sport;
   cluster_id= "/";
   cluster_id+= name;
+  pthread_mutex_init(&lock, NULL);
+}
+
+zk_manager::~zk_manager()
+{
+  pthread_mutex_destroy(&lock);
 }
 
 void fn_watcher_g(zhandle_t* zh, int type, int state, const char* path, void* watcherCtx)
@@ -338,8 +344,7 @@ void fn_watcher_g(zhandle_t* zh, int type, int state, const char* path, void* wa
           my_print_info("Connected to zookeeper service successfully!\n");
       } else if (state == ZOO_EXPIRED_SESSION_STATE) { 
           my_print_info("Zookeeper session expired!\n");
-          if (NULL != my_become_standby)
-            my_become_standby("-");
+          become_standby_cb("-");
      }
   }
 }
@@ -408,8 +413,7 @@ void zk_manager::disconnect()
 {
   zookeeper_close(handler); 
   my_print_info("server [%s] disconnect with zookeeper\n", my_uuid.c_str());
-  if (NULL != my_become_standby)
-    my_become_standby(my_uuid.c_str());
+  become_standby_cb(my_uuid.c_str());
 }
 
 
@@ -437,7 +441,6 @@ int zk_manager::get_syncpoint(char* binlog_filename, char* binlog_pos)
       my_print_info("get_syncpoint fail, %s is not a JSON format\n", buffer);
       return(EXIT_FAILURE);
     }
-
     string mode= *(object["mode"].begin());
     if (0 == strncmp("sync", mode.c_str(), 4))
     {
@@ -468,7 +471,8 @@ int zk_manager::get_syncpoint(char* binlog_filename, char* binlog_pos)
              buffer[buffer_len]= 0;
              my_list.push_back(buffer);             
            }
-         } 
+         }
+ 
         //get max slave's sync-point, syncPoint like "binlog_filename:binlog_pos"
          my_list.sort();
          my_list.reverse();
@@ -507,20 +511,18 @@ int zk_manager::get_syncpoint(char* binlog_filename, char* binlog_pos)
 *  IN: 
 *    uuid: mysqld's identifier
 *    service: mysqld service port
-*  OUT: 
-*    master: 1 it is master 
-*            0 it is not master 
-*    sync_binlog :
-*    sync_pos : slave's sync-point
+*    delay: delay register below ./master/ 
 *************************************************************/
 
-int zk_manager::register_server(const char* uuid, int service, int *is_master)
+int zk_manager::register_server(const char* uuid, int service, int delay)
 {
   char buffer[100];
   char buffer2[100];
   struct Stat stat;
   struct Stat stat2;
   int buffer_len= 100;
+  string repl_master_id;
+  struct String_vector children;
   cjson object;
 
   my_uuid= uuid;
@@ -528,6 +530,15 @@ int zk_manager::register_server(const char* uuid, int service, int *is_master)
   {
     my_print_info("get service endpoints fail!\n");
     return(EXIT_FAILURE);
+  }
+
+  pthread_mutex_lock(&lock);
+
+  if (delay && compeleted_register)
+  {
+    my_print_info("Alreadly register Successfully\n");
+    pthread_mutex_unlock(&lock);
+    return 0;
   }
   //register znode below /replication
   string repl_znode_id=cluster_id + "/replication/" + uuid;
@@ -545,7 +556,7 @@ int zk_manager::register_server(const char* uuid, int service, int *is_master)
     if(ZOK != ret)
     {
       my_print_info("can't create znode:%s\n", repl_znode_id.c_str());
-      return(EXIT_FAILURE);
+      goto fail;
     } 
   } 
   else if (ZOK == ret)
@@ -562,59 +573,74 @@ int zk_manager::register_server(const char* uuid, int service, int *is_master)
     if(ZOK != ret)
     {
       my_print_info("can't set znode:%s\n", repl_znode_id.c_str());
-      return(EXIT_FAILURE);
+      goto fail;
     } 
+
+    // get all active slaves
+    active_slaves.clear();
+    ret= zoo_wget_children(handler, repl_znode_id.c_str(), repl_watcher_fn, (void *)this, &children);
+    if (ZOK == ret) 
+    {
+      for (int i=0; i< children.count; i++)
+      {
+        for(map<string,string>::iterator it= nodes.begin(); it!=nodes.end(); ++it)
+        {
+          if (it->second == children.data[i])
+            active_slaves.insert(children.data[i]);
+        }
+      }
+    }   
   }
 
   //register znode below /master
-  string repl_master_id= cluster_id + "/master/";
-  ret= zoo_create(handler, repl_master_id.c_str(), uuid, strlen(uuid),
-         &ZOO_OPEN_ACL_UNSAFE, ZOO_SEQUENCE | ZOO_EPHEMERAL, buffer, 100);
+  ret= ZOK;
+  repl_master_id= cluster_id + "/master/";
 
+  if (!delay && !compeleted_register)
+  {
+    ret= zoo_create(handler, repl_master_id.c_str(), uuid, strlen(uuid),
+           &ZOO_OPEN_ACL_UNSAFE, ZOO_SEQUENCE | ZOO_EPHEMERAL, buffer, 100);
+    if ( ZOK == ret )
+    { 
+      compeleted_register= 1;
+      my_print_info("server [%s] register at zk-mananger. znode:%s\n", my_uuid.c_str(), buffer);
+      my_master_znode_id= buffer;
+    } else {
+      my_print_info("register_server failed, create znode %s fail, errno:%d\n", repl_master_id.c_str(), ret);
+      goto fail;
+    }
+  }else{
+    my_print_info("server [%s] delay to register znode below master/\n", my_uuid.c_str());
+    my_master_znode_id= "delay_register";
+  }
+
+  // get all active znodes below /master and watch it.
+  nodes.clear();
+  repl_master_id= cluster_id + "/master";
+  ret= zoo_wget_children(handler, repl_master_id.c_str(), master_watcher_fn, (void *)this, &children);
   if ( ZOK == ret )
   {
-    my_print_info("server [%s] register at zk-mananger. znode:%s\n", my_uuid.c_str(), buffer);
-    my_master_znode_id= buffer;
-
-    struct String_vector children;
-    repl_master_id= cluster_id + "/master";
-    ret= zoo_wget_children(handler, repl_master_id.c_str(), master_watcher_fn, (void *)this, &children);
-    if ( ZOK == ret )
+    if (children.count > 0)
     {
-      if (children.count > 0)
+      list<string> my_list;
+      for(int i=0; i< children.count; i++)
       {
-        list<string> my_list;
-        for(int i=0; i< children.count; i++)
+        my_list.push_back(children.data[i]);
+        string znode_id= repl_master_id + "/" + children.data[i];
+        buffer_len=100;
+        ret= zoo_get(handler, znode_id.c_str(), 0, buffer2, &buffer_len, &stat2);
+        // get all current nodes's znode and uuid, save in nodes list
+        if ( ZOK == ret)
         {
-          my_list.push_back(children.data[i]);
-          string znode_id= repl_master_id + "/" + children.data[i];
-          buffer_len=100;
-          ret= zoo_get(handler, znode_id.c_str(), 0, buffer2, &buffer_len, &stat2);
-          // get all current nodes's znode and uuid, save in nodes list
-          if ( ZOK == ret)
-          {
-            buffer2[buffer_len]=0;
-            nodes.insert(pair<string, string>(children.data[i], buffer2));
-          }
+          buffer2[buffer_len]=0;
+          nodes.insert(pair<string, string>(children.data[i], buffer2));
         }
+      }
 
-        // get all active slaves
-        ret= zoo_wget_children(handler, repl_znode_id.c_str(), repl_watcher_fn, (void *)this, &children);
-        if (ZOK == ret) 
-        {
-          for (int i=0; i< children.count; i++)
-          {
-            for(map<string,string>::iterator it= nodes.begin(); it!=nodes.end(); ++it)
-            {
-              if (it->second == children.data[i])
-                active_slaves.insert(children.data[i]);
-            }
-          }
-        }   
-
-        // 
+      i_am_master= 0;
+      if (!delay)
+      { 
         my_list.sort();
-
         buffer_len=100;
         string master_1st_node_id= cluster_id + "/master/" + *my_list.begin();
         ret= zoo_get(handler, master_1st_node_id.c_str(), 0, buffer, &buffer_len, &stat);
@@ -623,17 +649,14 @@ int zk_manager::register_server(const char* uuid, int service, int *is_master)
         {
           if ( my_uuid == buffer )
           {
-            *is_master= i_am_master= 1;
-            if (NULL != my_become_master)
-              my_become_master(my_uuid.c_str());
-
+            i_am_master= 1;
+            become_master_cb(my_uuid.c_str());
             my_print_info("server [%s] become master\n", my_uuid.c_str());
           }
           else 
           {
-            *is_master= i_am_master= 0;
-            if (NULL != my_become_standby)
-              my_become_standby(my_uuid.c_str());
+            i_am_master= 0;
+            become_standby_cb(my_uuid.c_str());
 
             my_print_info("server [%s] become standby, current master is server [%s]\n", my_uuid.c_str(), buffer);
           }
@@ -641,16 +664,19 @@ int zk_manager::register_server(const char* uuid, int service, int *is_master)
         else
         {
           my_print_info("register_server() zoo_get fail. errno:%d\n", ret);
-          return(EXIT_FAILURE);
+          goto fail;
         }
       }
     }
-  } 
-  else{
-    my_print_info("register_server failed, create znode %s fail, errno:%d\n", repl_master_id.c_str(), ret);
-    return(EXIT_FAILURE);
-  } 
-  return(0);
+  }
+
+end:
+  pthread_mutex_unlock(&lock);
+  return 0;
+
+fail:  
+  pthread_mutex_unlock(&lock);
+  return(EXIT_FAILURE);
 }
 
 /*
@@ -708,12 +734,10 @@ int zk_manager::start_repl(const char* master_endpoint)
     my_print_info("find_master_repl_znode failed!, master endpoint:%s\n", master_endpoint);
     return(EXIT_FAILURE);
   }
-
   string repl_slave_id= cluster_id + "/replication/" + master_uuid + "/" + my_uuid;
   char binlog_name[100]= {0};
   unsigned long long binlog_pos;
-  if (NULL != my_set_syncpoint)
-    my_set_syncpoint(binlog_name, &binlog_pos);
+  set_syncpoint_cb(binlog_name, &binlog_pos);
 
   char syncpoint[100]= {0};
   sprintf(syncpoint, "%s:%lld", binlog_name, binlog_pos);
@@ -738,8 +762,7 @@ int zk_manager::stop_repl(const char* master_endpoint)
   // record my sync-point in slave znode
   char binlog_name[100]={0};
   unsigned long long binlog_pos= 0;
-  if (NULL != my_set_syncpoint)
-    my_set_syncpoint(binlog_name, &binlog_pos);
+  set_syncpoint_cb(binlog_name, &binlog_pos);
 
   char master_uuid[30] = {0};
   if (find_master_repl_znode(master_endpoint, master_uuid))

@@ -19,6 +19,16 @@ int lost_all_slaves(const char* uuid)
   return 0;
 }
 
+int my_master_alive(const char* uuid)
+{
+  fprintf(stderr, "my repl master %s alive\n", uuid);
+}
+
+int my_master_dead(const char* uuid)
+{
+  fprintf(stderr, "my repl master %s dead\n", uuid);
+}
+
 // become master success
 int become_master(const char* uuid)
 {
@@ -47,6 +57,27 @@ int have_a_slave(const char* uuid)
   return 0;
 }
 
+set_func_void_pchar_punll set_setsyncpoint= NULL;
+set_func_int_pchar_t set_replslavealive= NULL;
+set_func_int_pchar_t set_replslavedead= NULL;
+set_func_int_pchar_t set_replmasteralive= NULL;
+set_func_int_pchar_t set_replmasterdead= NULL;
+set_func_int_pchar_t set_becomemaster= NULL;
+set_func_int_pchar_t set_becomestandby= NULL;
+
+int my_set_cb_funcs()
+{
+  // set callback function for zk_manager
+  set_setsyncpoint(get_io_syncpoint);
+  set_replslavedead(lost_all_slaves);
+  set_replmasterdead(my_master_dead);
+  set_replslavealive(have_a_slave);
+  set_replmasteralive(my_master_alive);
+  set_becomemaster(become_master);
+  set_becomestandby(become_standby);
+  return 0;
+}
+
 
 int main()
 {
@@ -64,50 +95,72 @@ int main()
       exit(EXIT_FAILURE);
   }
   dlerror(); 
+
+  func_void_void_t zm_lock_cb= (func_void_void_t)dlsym(handle, "my_lock_cb");
+  if ((error = dlerror()) != NULL)  {
+      fprintf(stderr, "%s\n", error);
+      exit(EXIT_FAILURE);
+    }  
+
+  func_void_void_t zm_unlock_cb= (func_void_void_t)dlsym(handle, "my_unlock_cb");
+  if ((error = dlerror()) != NULL)  {
+      fprintf(stderr, "%s\n", error);
+      exit(EXIT_FAILURE);
+    }  
+  
+  set_func_int_void_t set_func_set_cb_1= (set_func_int_void_t)dlsym(handle, "set_func_set_cb_1");
+  if ((error = dlerror()) != NULL)  {
+      fprintf(stderr, "%s\n", error);
+      exit(EXIT_FAILURE);
+    }  
+
+  zm_lock_cb();
+  set_func_set_cb_1(my_set_cb_funcs); 
+  zm_unlock_cb();
+
   // set callback function for zk_manager
-  set_func1_cb_t set_setsyncpoint;
-  set_setsyncpoint= (set_func1_cb_t)dlsym(handle, "set_cb_setsyncpoint");
-  if ((error = dlerror()) != NULL)  {
-      fprintf(stderr, "%s\n", error);
-      exit(EXIT_FAILURE);
-    }  
-  set_setsyncpoint(get_io_syncpoint);
-
-  set_func2_cb_t set_replslavedead;
-  set_replslavedead= (set_func2_cb_t)dlsym(handle, "set_cb_replslavedead");
-  if ((error = dlerror()) != NULL)  {
-      fprintf(stderr, "%s\n", error);
-      exit(EXIT_FAILURE);
-    }  
-  set_replslavedead(lost_all_slaves);
-
-  set_func2_cb_t set_becomemaster;
-  set_becomemaster= (set_func2_cb_t)dlsym(handle, "set_cb_becomemaster");
+  set_setsyncpoint= (set_func_void_pchar_punll)dlsym(handle, "set_cb_setsyncpoint");
   if ((error = dlerror()) != NULL)  {
       fprintf(stderr, "%s\n", error);
       exit(EXIT_FAILURE);
     }  
 
-  set_becomemaster(become_master);
-
-  set_func2_cb_t set_becomestandby;
-  set_becomestandby= (set_func2_cb_t)dlsym(handle, "set_cb_becomestandby");
+  set_replslavealive= (set_func_int_pchar_t)dlsym(handle, "set_cb_replslavealive");
   if ((error = dlerror()) != NULL)  {
       fprintf(stderr, "%s\n", error);
       exit(EXIT_FAILURE);
     }  
 
-  set_becomestandby(become_standby);
-
-
-  set_func2_cb_t set_replslavealive;
-  set_replslavealive= (set_func2_cb_t)dlsym(handle, "set_cb_replslavealive");
+  set_replslavedead= (set_func_int_pchar_t)dlsym(handle, "set_cb_replslavedead");
   if ((error = dlerror()) != NULL)  {
       fprintf(stderr, "%s\n", error);
       exit(EXIT_FAILURE);
     }  
-  set_replslavealive(have_a_slave);
 
+  set_replmasteralive= (set_func_int_pchar_t)dlsym(handle, "set_cb_replmasteralive");
+  if ((error = dlerror()) != NULL)  {
+      fprintf(stderr, "%s\n", error);
+      exit(EXIT_FAILURE);
+    }  
+
+  set_replmasterdead= (set_func_int_pchar_t)dlsym(handle, "set_cb_replmasterdead");
+  if ((error = dlerror()) != NULL)  {
+      fprintf(stderr, "%s\n", error);
+      exit(EXIT_FAILURE);
+    }  
+
+
+  set_becomemaster= (set_func_int_pchar_t)dlsym(handle, "set_cb_becomemaster");
+  if ((error = dlerror()) != NULL)  {
+      fprintf(stderr, "%s\n", error);
+      exit(EXIT_FAILURE);
+    }  
+
+  set_becomestandby= (set_func_int_pchar_t)dlsym(handle, "set_cb_becomestandby");
+  if ((error = dlerror()) != NULL)  {
+      fprintf(stderr, "%s\n", error);
+      exit(EXIT_FAILURE);
+    }  
 
 //load zk_manager functions
   zm_connect_t zm_connect;
@@ -159,18 +212,19 @@ int main()
       fprintf(stderr, "%s\n", error);
       exit(EXIT_FAILURE);
     } 
-
+  
+  void *zm_p_1, *zm_p_2;
 
   fprintf(stderr,"\n----Test register_server----\n");
 
-  void *zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
   fprintf(stderr, "\n>>>server [a1] should be master<<<\n");
-  zm_register(zm_p_1, "a1", 3306, &is_master);
+  zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
 
-  void *zm_p_2= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_2= zm_connect("127.0.0.1","3181","unittest");
   fprintf(stderr, "\n>>>server [a2] should be standby<<<\n");
-  zm_register(zm_p_2, "a2", 3307, &is_master);
+  zm_register(zm_p_2, "a2", 3307, 0);
   sleep(1);
 
   fprintf(stderr,"\n----Test start/stop/rm repl----\n");
@@ -186,6 +240,7 @@ int main()
   fprintf(stderr, "\n>>>server a1 should fould lost slave<<<\n");
   zm_rm_repl(zm_p_2, "127.0.0.1:3306");
   sleep(1);
+
   //clean
   zm_disconnect(zm_p_1);
   zm_disconnect(zm_p_2);
@@ -193,11 +248,11 @@ int main()
   fprintf(stderr,"\n----Test sync master_offline----\n");
   //setup
   zm_p_1= zm_connect("127.0.0.1","3181","unittest");
-  zm_register(zm_p_1, "a1", 3306, &is_master);
+  zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
 
   zm_p_2= zm_connect("127.0.0.1","3181","unittest");
-  zm_register(zm_p_2, "a2", 3307, &is_master);
+  zm_register(zm_p_2, "a2", 3307, 0);
   sleep(1);
 
 
@@ -212,7 +267,8 @@ int main()
 
   zm_p_1= zm_connect("127.0.0.1","3181","unittest");
   fprintf(stderr, "\n>>>server a1 should read syncpoint successfully, and become standby<<<\n");
-  zm_register(zm_p_1, "a1", 3306, &is_master);
+  zm_register(zm_p_1, "a1", 3306, 0);
+  sleep(1);
   zm_get_syncpoint(zm_p_1, binlog_name, binlog_pos);
 
   //clean
@@ -223,11 +279,11 @@ int main()
   fprintf(stderr,"\n----Test sync master_offline, standby become master fail----\n");
   //setup
   zm_p_1= zm_connect("127.0.0.1","3181","unittest");
-  zm_register(zm_p_1, "a1", 3306, &is_master);
+  zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
 
   zm_p_2= zm_connect("127.0.0.1","3181","unittest");
-  zm_register(zm_p_2, "a2", 3306, &is_master);
+  zm_register(zm_p_2, "a2", 3306, 0);
   sleep(1);
 
 
@@ -247,11 +303,11 @@ int main()
   fprintf(stderr,"\n----Test async master_offline----\n");
   //setup
   zm_p_1= zm_connect("127.0.0.1","3181","unittest");
-  zm_register(zm_p_1, "a1", 3306, &is_master);
+  zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
 
   zm_p_2= zm_connect("127.0.0.1","3181","unittest");
-  zm_register(zm_p_2, "a2", 3306, &is_master);
+  zm_register(zm_p_2, "a2", 3306, 0);
   sleep(1);
 
 
@@ -264,7 +320,8 @@ int main()
 
   fprintf(stderr, "\n>>>server a1 should be master, server a2 should register again<<<\n");
   zm_p_1= zm_connect("127.0.0.1","3181","unittest");
-  zm_register(zm_p_1, "a1", 3306, &is_master);
+  zm_register(zm_p_1, "a1", 3306, 0);
+  sleep(1);
   fprintf(stderr, "\n>>>server a1 should get syncpoint fail, because it do async-repl<<<\n");
   zm_get_syncpoint(zm_p_1, binlog_name, binlog_pos);
   sleep(1);
@@ -279,11 +336,11 @@ int main()
   fprintf(stderr,"\n----Test standby_offline----\n");
   //setup
   zm_p_1= zm_connect("127.0.0.1","3181","unittest");
-  zm_register(zm_p_1, "a1", 3306, &is_master);
+  zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
 
   zm_p_2= zm_connect("127.0.0.1","3181","unittest");
-  zm_register(zm_p_2, "a2", 3306, &is_master);
+  zm_register(zm_p_2, "a2", 3306, 0);
   sleep(1);
 
   zm_start_repl(zm_p_2, "127.0.0.1:3306");
@@ -294,11 +351,55 @@ int main()
 
   //clean
   zm_p_2= zm_connect("127.0.0.1","3181","unittest");
-  zm_register(zm_p_2, "a2", 3306 ,&is_master);
+  zm_register(zm_p_2, "a2", 3306 ,0);
   zm_rm_repl(zm_p_2, "127.0.0.1:3306");
 
   zm_disconnect(zm_p_1);
   zm_disconnect(zm_p_2);
+
+  fprintf(stderr,"\n----Test delay register_server----\n");
+
+  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  fprintf(stderr, "\n>>>server [a1] should be standby<<<\n");
+  zm_register(zm_p_1, "a1", 3306, 1);
+  sleep(1);
+
+  zm_p_2= zm_connect("127.0.0.1","3181","unittest");
+  fprintf(stderr, "\n>>>server [a2] should be master<<<\n");
+  zm_register(zm_p_2, "a2", 3307, 0);
+  sleep(1);
+
+  //clean
+  zm_disconnect(zm_p_1);
+  zm_disconnect(zm_p_2);
+
+  fprintf(stderr,"\n----Test repeat-1 register_server----\n");
+
+  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  fprintf(stderr, "\n>>>server [a1] should be standby<<<\n");
+  zm_register(zm_p_1, "a1", 3306, 1);
+  sleep(1);
+
+  fprintf(stderr, "\n>>>server [a1] should be master<<<\n");
+  zm_register(zm_p_1, "a1", 3306, 0);
+  sleep(1);
+
+  //clean
+  zm_disconnect(zm_p_1);
+
+  fprintf(stderr,"\n----Test repeat-2 register_server----\n");
+
+  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  fprintf(stderr, "\n>>>server [a1] should be master<<<\n");
+  zm_register(zm_p_1, "a1", 3306, 0);
+  sleep(1);
+
+  fprintf(stderr, "\n>>>server [a1] shouldn't register again<<<\n");
+  zm_register(zm_p_1, "a1", 3306, 1);
+  sleep(1);
+
+  //clean
+  zm_disconnect(zm_p_1);
 
   dlclose(handle);
 }
