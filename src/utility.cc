@@ -29,7 +29,10 @@ bool syncPoint::operator<(const syncPoint &str) const
 
 static void my_print(const char* msg, const char *level)
 {
-  fprintf(stderr, "[VSR HA]-[%s] ", level);
+ time_t t = time(0);
+ char tmp[64];
+ strftime( tmp, sizeof(tmp), "%y%m%d %H:%M:%S",localtime(&t) );
+ fprintf(stderr, "%s [%s] [HASuite:] ", tmp, level);
 }
 
 void my_print_info(const char* msg, ...)
@@ -260,7 +263,6 @@ void become_standby_cb(const char* uuid)
   else
   {
     pthread_mutex_unlock(&lock_cb);
-    my_print_warn("become_standby callback function isn't set\n");
   }
 }
 

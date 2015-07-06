@@ -455,7 +455,7 @@ int zk_manager::get_syncpoint(char* binlog_filename, char* binlog_pos)
       
       if (0 == children.count) 
       {
-        my_print_info("server [%s] can't get slave sync-point, for it has no active-slave \n", my_uuid.c_str());
+        my_print_info("server [%s] can't get slave sync-point, because it has no active-slave \n", my_uuid.c_str());
       }
       else {
          list<syncPoint> my_list;
@@ -487,7 +487,7 @@ int zk_manager::get_syncpoint(char* binlog_filename, char* binlog_pos)
       }
       
     } else {
-      my_print_info("server [%s] do async-repl when offline last time. so shouldn't get sync-point\n", my_uuid.c_str());
+      my_print_info("server [%s] do async-replcation when offline last time.\n", my_uuid.c_str());
       return(REPL_ASYNC);
     }
   }
