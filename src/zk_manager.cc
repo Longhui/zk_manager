@@ -18,13 +18,6 @@
 
 using std::list;
 using std::set;
-/***********************************************************
-* name: nodes_discrease 
-* description: call when nodes' number of cluster discrease,
-* params:
-*  IN: zh, uuid, data 
-*  OUT: 
-***********************************************************/
 
 void repl_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void *ctx)
 {
@@ -96,7 +89,13 @@ void repl_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void *
   }
 }
 
-
+/***********************************************************
+* name: nodes_discrease 
+* description: call when nodes' number of cluster discrease,
+* params:
+*  IN: zh, uuid, data 
+*  OUT: 
+***********************************************************/
 void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
 {
   char buffer[100]= {0};
@@ -145,11 +144,7 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
   //the master dead, check if can I become master or not.
   if (!i_am_master && is_my_repl_master)
   { 
-
-    if (my_repl_master_dead)
-    {
-      my_repl_master_dead(instance->my_uuid.c_str());
-    }
+    repl_master_dead_cb(instance->my_uuid.c_str());
 
     string repl_master_id= instance->cluster_id + "/replication/" + uuid;
     ret= zoo_get(zh, repl_master_id.c_str(), 0, buffer, &buffer_len, &stat);
@@ -167,7 +162,7 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
 
     if ( 0 == strncmp("sync", mode.c_str(), 4) )
     {
-      //i always do sync-replication with disapareed node, so i can be master.
+      //i always do sync-replication with disappared node, so i can be master.
         if(!become_master_cb(instance->my_uuid.c_str()))
         {
           instance->i_am_master= 1;
@@ -534,7 +529,7 @@ int zk_manager::register_server(const char* uuid, int service, int delay)
 
   pthread_mutex_lock(&lock);
 
-  if (delay && compeleted_register)
+  if (compeleted_register)
   {
     my_print_info("Alreadly register Successfully\n");
     pthread_mutex_unlock(&lock);
@@ -593,10 +588,13 @@ int zk_manager::register_server(const char* uuid, int service, int delay)
   }
 
   //register znode below /master
+  repl_master_id= cluster_id + "/master";
+  ret= zoo_get_children(handler, repl_master_id.c_str(), 0, &children);
+  delay &= children.count > 0 ? 0 : 1; //if there is other servers running, no need to delay register
+
   ret= ZOK;
   repl_master_id= cluster_id + "/master/";
-
-  if (!delay && !compeleted_register)
+  if (!delay)
   {
     ret= zoo_create(handler, repl_master_id.c_str(), uuid, strlen(uuid),
            &ZOO_OPEN_ACL_UNSAFE, ZOO_SEQUENCE | ZOO_EPHEMERAL, buffer, 100);
