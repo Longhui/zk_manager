@@ -287,7 +287,7 @@ extern "C" void* zm_connect(const char* host, const char* port, const char* clus
 extern "C" int zm_disconnect(void *data)
 {
   zk_manager_p* zm= (zk_manager_p *)data;
-  if (ZK_MANAGER_MAGIC == zm->magic)
+  if (data && ZK_MANAGER_MAGIC == zm->magic)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
     manager->disconnect();
@@ -304,7 +304,7 @@ extern "C" int zm_disconnect(void *data)
 extern "C" int zm_register(void *data, const char* uuid, int port, int delay)
 {
   zk_manager_p* zm= (zk_manager_p *)data;
-  if (ZK_MANAGER_MAGIC == zm->magic)
+  if (data && ZK_MANAGER_MAGIC == zm->magic)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
     int ret= manager->register_server(uuid, port, delay);
@@ -320,7 +320,7 @@ extern "C" int zm_register(void *data, const char* uuid, int port, int delay)
 extern "C" int zm_get_syncpoint(void *data, char* filename, char* pos)
 {
   zk_manager_p* zm= (zk_manager_p *)data;
-  if (ZK_MANAGER_MAGIC == zm->magic)
+  if (data && ZK_MANAGER_MAGIC == zm->magic)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
     int ret= manager->get_syncpoint(filename, pos);
@@ -336,7 +336,7 @@ extern "C" int zm_get_syncpoint(void *data, char* filename, char* pos)
 extern "C" int zm_start_repl(void *data, const char* master_uuid)
 {
   zk_manager_p* zm= (zk_manager_p *)data;
-  if (ZK_MANAGER_MAGIC == zm->magic)
+  if (data && ZK_MANAGER_MAGIC == zm->magic)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
     int ret= manager->start_repl(master_uuid);
@@ -352,7 +352,7 @@ extern "C" int zm_start_repl(void *data, const char* master_uuid)
 extern "C" int zm_stop_repl(void *data, const char* master_uuid)
 {
   zk_manager_p* zm= (zk_manager_p *)data;
-  if (ZK_MANAGER_MAGIC == zm->magic)
+  if (data && ZK_MANAGER_MAGIC == zm->magic)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
     int ret= manager->stop_repl(master_uuid);
@@ -366,7 +366,7 @@ extern "C" int zm_stop_repl(void *data, const char* master_uuid)
 extern "C" int zm_rm_repl(void *data, const char* master_uuid)
 {
   zk_manager_p* zm= (zk_manager_p *)data;
-  if (ZK_MANAGER_MAGIC == zm->magic)
+  if (data && ZK_MANAGER_MAGIC == zm->magic)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
     int ret= manager->rm_repl(master_uuid);
@@ -390,7 +390,7 @@ extern "C" void my_unlock_cb()
 extern "C" int zm_change_repl_mode(void *data, int sync)
 {
   zk_manager_p* zm= (zk_manager_p *)data;
-  if (ZK_MANAGER_MAGIC == zm->magic)
+  if (data && ZK_MANAGER_MAGIC == zm->magic)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
     int ret= manager->change_repl_mode(sync);

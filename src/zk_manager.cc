@@ -347,7 +347,8 @@ void fn_watcher_g(zhandle_t* zh, int type, int state, const char* path, void* wa
 
 int zk_manager::connect()
 {
-  string endpoint= host+":"+port;
+  //string endpoint= host+":"+port;
+  string endpoint= host;
   int timeout=10000;
 
   zoo_set_debug_level(ZOO_LOG_LEVEL_WARN);

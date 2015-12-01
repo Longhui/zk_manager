@@ -217,12 +217,17 @@ int main()
 
   fprintf(stderr,"\n----Test register_server----\n");
 
-  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_1= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
+/*  if (NULL == zm_p_1)
+  {
+     exit(1);
+  }
+*/
   fprintf(stderr, "\n>>>server [a1] should be master<<<\n");
   zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
 
-  zm_p_2= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_2= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   fprintf(stderr, "\n>>>server [a2] should be standby<<<\n");
   zm_register(zm_p_2, "a2", 3307, 0);
   sleep(1);
@@ -230,15 +235,15 @@ int main()
   fprintf(stderr,"\n----Test start/stop/rm repl----\n");
 
   fprintf(stderr, "\n>>>server a1 should fould have a slave<<<\n");
-  zm_start_repl(zm_p_2, "127.0.0.1:3306");
+  zm_start_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
   sleep(1);
   
   fprintf(stderr, "\n>>>server a2 should record its syncpoint<<<\n");
-  zm_stop_repl(zm_p_2, "127.0.0.1:3306");
-  zm_stop_repl(zm_p_2, "127.0.0.1:3306");
+  zm_stop_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_stop_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
 
   fprintf(stderr, "\n>>>server a1 should fould lost slave<<<\n");
-  zm_rm_repl(zm_p_2, "127.0.0.1:3306");
+  zm_rm_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
   sleep(1);
 
   //clean
@@ -247,16 +252,16 @@ int main()
 
   fprintf(stderr,"\n----Test sync master_offline----\n");
   //setup
-  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_1= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
 
-  zm_p_2= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_2= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   zm_register(zm_p_2, "a2", 3307, 0);
   sleep(1);
 
 
-  zm_start_repl(zm_p_2, "127.0.0.1:3306");
+  zm_start_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
   sleep(1);
   fprintf(stderr, "\n>>>server a2 should become master<<<\n");
   sleep(1);
@@ -265,29 +270,29 @@ int main()
 
   fprintf(stderr,"\n----Test sync master_online----\n");
 
-  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_1= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   fprintf(stderr, "\n>>>server a1 should read syncpoint successfully, and become standby<<<\n");
   zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
   zm_get_syncpoint(zm_p_1, binlog_name, binlog_pos);
 
   //clean
-  zm_rm_repl(zm_p_2, "127.0.0.1:3306");
+  zm_rm_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
   zm_disconnect(zm_p_1);
   zm_disconnect(zm_p_2);
 
   fprintf(stderr,"\n----Test sync master_offline, standby become master fail----\n");
   //setup
-  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_1= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
 
-  zm_p_2= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_2= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   zm_register(zm_p_2, "a2", 3306, 0);
   sleep(1);
 
 
-  zm_start_repl(zm_p_2, "127.0.0.1:3306");
+  zm_start_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
   sleep(1);
   set_becomemaster(become_master_1);
   fprintf(stderr, "\n>>>server a2 become master fail, it should deregister from zk_manager<<<\n");
@@ -297,21 +302,21 @@ int main()
 
   //clean
   set_becomemaster(become_master);
-  zm_rm_repl(zm_p_2, "127.0.0.1:3306");
+  zm_rm_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
   zm_disconnect(zm_p_2);
 
   fprintf(stderr,"\n----Test async master_offline----\n");
   //setup
-  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_1= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
 
-  zm_p_2= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_2= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   zm_register(zm_p_2, "a2", 3306, 0);
   sleep(1);
 
 
-  zm_start_repl(zm_p_2, "127.0.0.1:3306");
+  zm_start_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
   zm_change_repl_mode(zm_p_1, 0);
   sleep(1);
   fprintf(stderr, "\n>>>server a2 shouldn't become master, and it should deregister from zk_manager<<<\n");
@@ -319,7 +324,7 @@ int main()
   sleep(1);
 
   fprintf(stderr, "\n>>>server a1 should be master, server a2 should register again<<<\n");
-  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_1= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
   fprintf(stderr, "\n>>>server a1 should get syncpoint fail, because it do async-repl<<<\n");
@@ -328,43 +333,43 @@ int main()
   zm_change_repl_mode(zm_p_1, 1);
 
   //clean
-  zm_rm_repl(zm_p_2, "127.0.0.1:3306");
+  zm_rm_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
   zm_disconnect(zm_p_1);
   zm_disconnect(zm_p_2);
 
 
   fprintf(stderr,"\n----Test standby_offline----\n");
   //setup
-  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_1= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
 
-  zm_p_2= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_2= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   zm_register(zm_p_2, "a2", 3306, 0);
   sleep(1);
 
-  zm_start_repl(zm_p_2, "127.0.0.1:3306");
+  zm_start_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
   sleep(1);
   fprintf(stderr, "\n>>>server a1 should find it lost slave<<<\n");
   zm_disconnect(zm_p_2);  
   sleep(1);
 
   //clean
-  zm_p_2= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_2= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   zm_register(zm_p_2, "a2", 3306 ,0);
-  zm_rm_repl(zm_p_2, "127.0.0.1:3306");
+  zm_rm_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
 
   zm_disconnect(zm_p_1);
   zm_disconnect(zm_p_2);
 
   fprintf(stderr,"\n----Test delay register_server----\n");
 
-  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_1= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   fprintf(stderr, "\n>>>server [a1] should be standby<<<\n");
   zm_register(zm_p_1, "a1", 3306, 1);
   sleep(1);
 
-  zm_p_2= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_2= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   fprintf(stderr, "\n>>>server [a2] should be master<<<\n");
   zm_register(zm_p_2, "a2", 3307, 0);
   sleep(1);
@@ -375,7 +380,7 @@ int main()
 
   fprintf(stderr,"\n----Test repeat-1 register_server----\n");
 
-  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_1= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   fprintf(stderr, "\n>>>server [a1] should be standby<<<\n");
   zm_register(zm_p_1, "a1", 3306, 1);
   sleep(1);
@@ -389,7 +394,7 @@ int main()
 
   fprintf(stderr,"\n----Test repeat-2 register_server----\n");
 
-  zm_p_1= zm_connect("127.0.0.1","3181","unittest");
+  zm_p_1= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   fprintf(stderr, "\n>>>server [a1] should be master<<<\n");
   zm_register(zm_p_1, "a1", 3306, 0);
   sleep(1);
