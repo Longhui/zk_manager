@@ -235,15 +235,15 @@ int main()
   fprintf(stderr,"\n----Test start/stop/rm repl----\n");
 
   fprintf(stderr, "\n>>>server a1 should fould have a slave<<<\n");
-  zm_start_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_start_repl(zm_p_2, "db-43.photo.163.org:3306");
   sleep(1);
   
   fprintf(stderr, "\n>>>server a2 should record its syncpoint<<<\n");
-  zm_stop_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
-  zm_stop_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_stop_repl(zm_p_2, "db-43.photo.163.org:3306");
+  zm_stop_repl(zm_p_2, "db-43.photo.163.org:3306");
 
   fprintf(stderr, "\n>>>server a1 should fould lost slave<<<\n");
-  zm_rm_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_rm_repl(zm_p_2, "db-43.photo.163.org:3306");
   sleep(1);
 
   //clean
@@ -261,7 +261,7 @@ int main()
   sleep(1);
 
 
-  zm_start_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_start_repl(zm_p_2, "db-43.photo.163.org:3306");
   sleep(1);
   fprintf(stderr, "\n>>>server a2 should become master<<<\n");
   sleep(1);
@@ -277,7 +277,7 @@ int main()
   zm_get_syncpoint(zm_p_1, binlog_name, binlog_pos);
 
   //clean
-  zm_rm_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_rm_repl(zm_p_2, "db-43.photo.163.org:3306");
   zm_disconnect(zm_p_1);
   zm_disconnect(zm_p_2);
 
@@ -292,7 +292,7 @@ int main()
   sleep(1);
 
 
-  zm_start_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_start_repl(zm_p_2, "db-43.photo.163.org:3306");
   sleep(1);
   set_becomemaster(become_master_1);
   fprintf(stderr, "\n>>>server a2 become master fail, it should deregister from zk_manager<<<\n");
@@ -302,7 +302,7 @@ int main()
 
   //clean
   set_becomemaster(become_master);
-  zm_rm_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_rm_repl(zm_p_2, "db-43.photo.163.org:3306");
   zm_disconnect(zm_p_2);
 
   fprintf(stderr,"\n----Test async master_offline----\n");
@@ -316,7 +316,7 @@ int main()
   sleep(1);
 
 
-  zm_start_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_start_repl(zm_p_2, "db-43.photo.163.org:3306");
   zm_change_repl_mode(zm_p_1, 0);
   sleep(1);
   fprintf(stderr, "\n>>>server a2 shouldn't become master, and it should deregister from zk_manager<<<\n");
@@ -333,7 +333,7 @@ int main()
   zm_change_repl_mode(zm_p_1, 1);
 
   //clean
-  zm_rm_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_rm_repl(zm_p_2, "db-43.photo.163.org:3306");
   zm_disconnect(zm_p_1);
   zm_disconnect(zm_p_2);
 
@@ -348,7 +348,7 @@ int main()
   zm_register(zm_p_2, "a2", 3306, 0);
   sleep(1);
 
-  zm_start_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_start_repl(zm_p_2, "db-43.photo.163.org:3306");
   sleep(1);
   fprintf(stderr, "\n>>>server a1 should find it lost slave<<<\n");
   zm_disconnect(zm_p_2);  
@@ -357,7 +357,7 @@ int main()
   //clean
   zm_p_2= zm_connect("db-43:2181,db-52:2181,db-181:2181","2181","unittest");
   zm_register(zm_p_2, "a2", 3306 ,0);
-  zm_rm_repl(zm_p_2, "db-43:2181,db-52:2181,db-181:2181:3306");
+  zm_rm_repl(zm_p_2, "db-43.photo.163.org:3306");
 
   zm_disconnect(zm_p_1);
   zm_disconnect(zm_p_2);

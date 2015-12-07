@@ -8,6 +8,7 @@
 
 #include <list>
 #include <set>
+#include <string>
 #include <string.h>
 #include "utility.h"
 #include "zk_manager.h"
@@ -18,6 +19,7 @@
 
 using std::list;
 using std::set;
+using std::string;
 
 void repl_watcher_fn(zhandle_t *zh, int type, int state, const char *path,void *ctx)
 {
@@ -110,18 +112,28 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
   int i_am_master= instance->i_am_master;
   string my_master_znode_id= instance->my_master_znode_id;  
 
+  if (uuid == instance->my_uuid)
+  {
+    my_print_info("Ignore zookeeper alarm of myself");
+    return;
+  }
+
   string repl_slave_id=instance->cluster_id+ "/replication/" + uuid + "/" + instance->my_uuid;
+
+  my_print_info("check znode %s\n", repl_slave_id.c_str());
   int ret= zoo_exists(zh, repl_slave_id.c_str(), 0, &stat);
   if (ZOK == ret)
   {// the disappeared node is my master
     is_my_repl_master= 1;
+    my_print_info("server [%s] is my master\n", uuid.c_str());
   } 
-
   repl_slave_id=instance->cluster_id+ "/replication/" + instance->my_uuid + "/" + uuid;
+  my_print_info("check znode %s\n", repl_slave_id.c_str());
   ret= zoo_exists(zh, repl_slave_id.c_str(), 0, &stat);
   if (ZOK == ret)
   {// the disappeared node is my master
     is_my_repl_slave= 1;
+    my_print_info("server [%s] is my slave\n", uuid.c_str());
   } 
   else if ( ZNONODE != ret )
   {
@@ -129,12 +141,14 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
               ret);
     return;
   }
-
   pthread_mutex_lock(&instance->lock);
 
   if (is_my_repl_slave)
   {
-    instance->active_slaves.erase(instance->active_slaves.find(uuid));
+    std::set<std::string>::iterator it = instance->active_slaves.find(uuid); 
+    if ( instance->active_slaves.end() != it)
+      instance->active_slaves.erase(it);
+    my_print_info("remove [%s] from my live slaves list\n", uuid.c_str());
     if (0 == instance->active_slaves.size())
     {
       repl_slave_dead_cb(instance->my_uuid.c_str());
@@ -147,6 +161,7 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
     repl_master_dead_cb(instance->my_uuid.c_str());
 
     string repl_master_id= instance->cluster_id + "/replication/" + uuid;
+    my_print_info("get replication mode from znode %s\n", repl_master_id.c_str());
     ret= zoo_get(zh, repl_master_id.c_str(), 0, buffer, &buffer_len, &stat);
     if ( ZOK != ret)
     {
@@ -163,6 +178,7 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
     if ( 0 == strncmp("sync", mode.c_str(), 4) )
     {
       //i always do sync-replication with disappared node, so i can be master.
+        my_print_info("server [%s] do sync-replication\n", uuid.c_str());
         if(!become_master_cb(instance->my_uuid.c_str()))
         {
           instance->i_am_master= 1;
@@ -199,19 +215,28 @@ void nodes_increase(zhandle_t *zh, const string &uuid, void *data)
 
   struct zk_manager *instance= (zk_manager *)data;
   string my_master_znode_id= instance->my_master_znode_id;  
+  if ( uuid == instance->my_uuid)
+  {
+    my_print_info("Ignore zookeeper alarm of myself\n");
+    return;
+  }
 
   int i_am_master= instance->i_am_master;
   string repl_slave_id= instance->cluster_id+ "/replication/" + instance->my_uuid + "/" +uuid;
+  my_print_info("check znode %s\n", repl_slave_id.c_str());
   int ret= zoo_exists(zh, repl_slave_id.c_str(), 0, &stat);
   if ( ZOK == ret )
   {// the new node is my slave
     is_my_repl_slave= 1;
+    my_print_info("server [%s] is my slave\n", uuid.c_str());
   }
   repl_slave_id=instance->cluster_id+ "/replication/" + uuid + "/" + instance->my_uuid;
+  my_print_info("check znode %s\n", repl_slave_id.c_str());
   ret= zoo_exists(zh, repl_slave_id.c_str(), 0, &stat);
   if ( ZOK == ret )
   {// the new node is my master
     is_my_repl_master= 1;
+    my_print_info("server [%s] is my slave\n", uuid.c_str());
   }
 
   pthread_mutex_lock(&instance->lock);
@@ -352,6 +377,7 @@ int zk_manager::connect()
   int timeout=10000;
 
   zoo_set_debug_level(ZOO_LOG_LEVEL_WARN);
+  //handler = NULL;
   handler = zookeeper_init(endpoint.c_str(),
            fn_watcher_g, timeout, 0, (void *)"zk_manager", 0);
 

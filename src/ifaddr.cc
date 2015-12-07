@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 #include "ifaddr.h"
 #include "crc32.h"
 
@@ -34,10 +35,15 @@ static int get_ifaddrs(set<string>& addr_list)
                 fprintf(stderr, "getnameinfo() failed: %s\n", gai_strerror(s));
                 return -1;
             }
-            addr_list.insert(host);
+            if (0 != strcmp(host, "127.0.0.1"))
+              addr_list.insert(host);
         }
     }
     freeifaddrs(ifaddr);
+
+    memset(host, 0, NI_MAXHOST);
+    gethostname(host, NI_MAXHOST);
+    addr_list.insert(host);
     return 0;
 }
 
