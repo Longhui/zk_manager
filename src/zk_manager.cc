@@ -112,8 +112,6 @@ void nodes_discrease(zhandle_t* zh, const string &uuid, void *data)
   int i_am_master= instance->i_am_master;
   string my_master_znode_id= *(instance->my_master_znode_id);  
 
-fprintf(stderr, "instance pointer:%x  master znode: %s\n", instance, my_master_znode_id.c_str());
-
   if (uuid == *(instance->my_uuid))
   {
     my_print_info("Ignore zookeeper event of myself\n");
@@ -417,8 +415,6 @@ zk_manager::~zk_manager()
   delete my_uuid;
   delete my_master_znode_id;
   pthread_mutex_destroy(&lock);
-
-fprintf(stderr, "111111111 destory zk_manager 1111111111111\n");
 }
 
 void fn_watcher_g(zhandle_t* zh, int type, int state, const char* path, void* watcherCtx)
