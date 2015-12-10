@@ -53,6 +53,7 @@ int get_endpoints_cipher(int port, set<string>& endpoints_cp)
   if(get_ifaddrs(ifaddrs))
     return -1;
 
+  endpoints_cp.clear();
   set<string>::iterator it;
   for (it= ifaddrs.begin(); it!= ifaddrs.end(); it++)
   {
@@ -63,9 +64,9 @@ int get_endpoints_cipher(int port, set<string>& endpoints_cp)
     endpoint += port_str;
 
     int cipher= crc32(0, endpoint.c_str(), endpoint.length());
-    char cipher_str[40]= {0};
-    sprintf(cipher_str, "%x", cipher);
-    endpoints_cp.insert(cipher_str);
+    char buffer[100]= {0};
+    sprintf(buffer, "%x", cipher);
+    endpoints_cp.insert(buffer);
   }
   return 0;
 }

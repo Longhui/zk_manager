@@ -270,10 +270,12 @@ extern "C" void* zm_connect(const char* host, const char* port, const char* clus
 {
   zk_manager* manager= new zk_manager(host, port, cluster_id);
 
+fprintf(stderr, "11111 new zk_manager : %x \n", manager);
   int ret= manager->connect();
   if (!ret)
   {
     zk_manager_p *data= new zk_manager_p;
+fprintf(stderr, "11111 new zk_manager_p : %x \n", data);
     data->ptr= (void *)manager;
     data->magic= ZK_MANAGER_MAGIC;
     return (void *)data;
@@ -291,8 +293,11 @@ extern "C" int zm_disconnect(void *data)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
     manager->disconnect();
+fprintf(stderr, "1111 delete zk_manager : %x \n", manager);
+fprintf(stderr, "1111 delete zk_manager_p : %x \n", zm);
     delete manager;
     delete zm;
+    return 0;
   } else
   {
     my_print_info("my_zm_disconnect() fail. zk_manager ptr:%x is unvailable\n", data);
@@ -356,6 +361,7 @@ extern "C" int zm_stop_repl(void *data, const char* master_uuid)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
     int ret= manager->stop_repl(master_uuid);
+    return 0;
   } else
   {
     my_print_info("my_zm_stop_repl() fail. zk_manager ptr:%x is unvailable\n", data);
@@ -370,6 +376,7 @@ extern "C" int zm_rm_repl(void *data, const char* master_uuid)
   {
     zk_manager *manager= (zk_manager*)(zm->ptr);
     int ret= manager->rm_repl(master_uuid);
+    return 0;
   } else
   {
     my_print_info("my_zm_rm_repl() fail. zk_manager ptr:%x is unvailable\n", data);
@@ -379,6 +386,7 @@ extern "C" int zm_rm_repl(void *data, const char* master_uuid)
 
 extern "C" void my_lock_cb()
 {
+fprintf(stderr, "my_lock_cb lock_cb : %x\n", &lock_cb);
   pthread_mutex_lock(&lock_cb);
 }
 

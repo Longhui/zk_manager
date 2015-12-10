@@ -14,15 +14,15 @@ using std::set;
 class zk_manager
 {
   public:
-    string cluster_id;
-    string host;
-    string port;
-    string my_uuid;
-    set<string> mysql_endpoints;
+    string *cluster_id;
+    string *host;
+    string *port;
+    string *my_uuid;
+    string *my_master_znode_id;
+    set<string> *mysql_endpoints;
+    map<string,string> *nodes;
+    set<string> *active_slaves;
     zhandle_t *handler;
-    map<string,string> nodes;
-    set<string> active_slaves;
-    string my_master_znode_id;
     bool i_am_master;
     bool compeleted_register;
     pthread_mutex_t lock;
