@@ -8,6 +8,7 @@
 * descripation: define class zk_manager
 *====================================*/
 #define REPL_ASYNC 3
+#define REPL_SYNC 0
 typedef void (*func_void_pchar_punll)(char *binlog_name, unsigned long long *binlog_pos);
 typedef int (*func_int_pchar_t)(const char*);
 typedef void (*func_void_void_t)();

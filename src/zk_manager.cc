@@ -299,7 +299,7 @@ void nodes_increase(zhandle_t *zh, const string &uuid, void *data)
   {
     if (instance->active_slaves->size() == 0)
     {
-      my_print_info("Add server [%s] into my live slaves' list", uuid.c_str());
+      my_print_info("Add server [%s] into my live slaves' list\n", uuid.c_str());
       instance->active_slaves->insert(uuid);
       repl_slave_alive_cb(instance->my_uuid->c_str());
     } 
@@ -436,7 +436,7 @@ int zk_manager::connect()
   string endpoint= *host;
   int timeout=10000;
 
-  zoo_set_debug_level(ZOO_LOG_LEVEL_WARN);
+  zoo_set_debug_level(ZOO_LOG_LEVEL_ERROR);
   //handler = NULL;
   handler = zookeeper_init(endpoint.c_str(),
            fn_watcher_g, timeout, 0, (void *)"zk_manager", 0);
